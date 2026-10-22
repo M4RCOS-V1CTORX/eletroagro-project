@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Building2, Check, Copy, LoaderCircle, MailPlus, Save, ShieldAlert, Users, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
-
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { apiUrl } from './apiUrl.js';
 
 async function apiRequest(path, options = {}) {
   const token = await getAuthAccessToken();

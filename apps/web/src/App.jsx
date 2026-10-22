@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Activity, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, LayoutDashboard, LogOut, Package, Settings, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
 const CatalogPage = lazy(() => import('./CatalogPage.jsx'));
 const QuotesPage = lazy(() => import('./QuotesPage.jsx'));
@@ -15,7 +16,6 @@ const StockPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({
 const AuditPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AuditPage })));
 const CompanyAccessPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.CompanyAccessPage })));
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const navigation = [
   { label: 'Visão geral', icon: LayoutDashboard, key: 'overview' },
   { label: 'Clientes', icon: ContactRound, key: 'customers' },

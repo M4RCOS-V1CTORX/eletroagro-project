@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, ArrowDownUp, Building2, ChevronLeft, ChevronRight, CirclePlus, Eye, LoaderCircle, Pencil, Search, UserRound, Users, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
 const emptyCustomer = {
   name: '', customerType: 'individual', taxIdentifier: '', phone: '', email: '',
@@ -26,7 +27,7 @@ const formFields = [
 
 async function apiRequest(path, options = {}) {
   const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${path}`, {
+  const send = (accessToken) => fetch(`${apiUrl}${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,

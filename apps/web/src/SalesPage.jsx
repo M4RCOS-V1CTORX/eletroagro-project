@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, CreditCard, Download, Eye, FileText, LoaderCircle, Plus, Search, Share2, ShoppingBag, TriangleAlert, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const statusLabels = { completed: 'Concluída', cancelled: 'Cancelada' };
 const paymentLabels = { pending: 'A receber', partial: 'Parcial', paid: 'Recebida' };

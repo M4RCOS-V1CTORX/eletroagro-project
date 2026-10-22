@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, Boxes, CirclePlus, Clock3, LoaderCircle, Package, Pencil, Search, Wrench, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const emptyItem = { itemType: 'product', code: '', name: '', description: '', category: '', unit: 'un', costPrice: '0', salePrice: '0', minimumStock: '0', estimatedMinutes: '' };
 
 async function apiRequest(path, options = {}) {

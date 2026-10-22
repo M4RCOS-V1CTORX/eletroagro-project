@@ -28,7 +28,12 @@ const pool = process.env.DATABASE_URL
 
 app.disable('x-powered-by');
 app.use(helmet());
-app.use(cors({ origin: allowedOrigin }));
+app.use(cors({
+  origin(origin, callback) {
+    const isVercelDeployment = typeof origin === 'string' && /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(origin);
+    callback(null, !origin || origin === allowedOrigin || origin === 'http://localhost:5173' || isVercelDeployment);
+  },
+}));
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/api/health', (_request, response) => {

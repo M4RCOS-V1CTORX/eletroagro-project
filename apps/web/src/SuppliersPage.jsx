@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BriefcaseBusiness, CirclePlus, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
 const emptyDraft = { name: '', taxIdentifier: '', phone: '', email: '', postalCode: '', street: '', streetNumber: '', addressComplement: '', neighborhood: '', city: '', state: '', notes: '' };
 
 async function apiRequest(path, options = {}) {
   const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${path}`, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
+  const send = (accessToken) => fetch(`${apiUrl}${path}`, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
   let response = await send(token);
   if (response.status === 401) {
     const fresh = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);

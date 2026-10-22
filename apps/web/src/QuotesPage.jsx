@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const statusLabels = { draft: 'Rascunho', sent: 'Enviado', approved: 'Aprovado', rejected: 'Recusado', expired: 'Expirado', cancelled: 'Cancelado' };
 const emptyLine = () => ({ catalogItemId: '', catalogQuery: '', quantity: '1', unitPrice: '0' });
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });

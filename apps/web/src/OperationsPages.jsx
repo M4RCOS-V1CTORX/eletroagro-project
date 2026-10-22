@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, ClipboardCheck, Download, FileClock, Filter, HardHat, LoaderCircle, Package, Plus, Search, Share2, ShoppingCart, TrendingDown, TrendingUp, Wallet, Wrench, X } from 'lucide-react';
 import { getAuthAccessToken } from './authClient.js';
+import { apiUrl } from './apiUrl.js';
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const methods = { pix: 'Pix', cash: 'Dinheiro', card_debit: 'Débito', card_credit: 'Crédito', transfer: 'Transferência', boleto: 'Boleto', other: 'Outro' };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
