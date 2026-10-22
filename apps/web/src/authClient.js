@@ -1,7 +1,8 @@
 import { createAuthClient } from '@neondatabase/neon-js/auth';
 import { BetterAuthVanillaAdapter } from '@neondatabase/neon-js/auth/vanilla/adapters';
 
-const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
+const authUrl = import.meta.env.VITE_NEON_AUTH_URL
+  || 'https://ep-flat-sky-b6ju7s7a.neonauth.c-2.sa-east-1.aws.neon.tech/neondb/auth';
 
 export const authClient = authUrl
   ? createAuthClient(authUrl, {
