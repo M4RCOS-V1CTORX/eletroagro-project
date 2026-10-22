@@ -1,0 +1,1136 @@
+# DOCUMENTO MESTRE DO PROJETO
+## Sistema de Gestão para Serviços Elétricos
+
+**Versão:** 1.0 — Especificação inicial do projeto  
+**Status:** Planejamento e preparação da arquitetura  
+**Objetivo:** Desenvolver um sistema de gestão comercial personalizado, confiável, responsivo, com funcionamento offline e sincronização entre dispositivos.
+
+---
+
+# 1. VISÃO GERAL DO PROJETO
+
+Estou desenvolvendo um sistema de gestão para uma empresa que trabalha com serviços elétricos.
+
+O sistema deverá centralizar as principais atividades administrativas e operacionais da empresa, permitindo gerenciar clientes, produtos, materiais, serviços, orçamentos, vendas, ordens de serviço, estoque, receitas, despesas, contas e relatórios.
+
+A solução deverá ser acessível por computador, celular e tablet, possuir uma interface moderna e profissional e permitir o trabalho mesmo quando não houver conexão com a internet, com sincronização dos dados quando a conexão voltar.
+
+O sistema será utilizado por até cinco pessoas, com contas individuais e acesso aos dados compartilhados da empresa.
+
+A prioridade não é apenas criar uma interface bonita. O sistema precisa ter uma arquitetura organizada, segurança, integridade dos dados, regras de negócio consistentes, tratamento de erros e possibilidade de manutenção futura.
+
+## Objetivos principais
+
+1. Centralizar a gestão da empresa em um único sistema.
+2. Reduzir tarefas manuais e erros de digitação.
+3. Automatizar a numeração dos documentos.
+4. Facilitar a criação e o compartilhamento de orçamentos.
+5. Integrar vendas, serviços, estoque e financeiro.
+6. Permitir acesso em diferentes dispositivos.
+7. Trabalhar offline e sincronizar os dados posteriormente.
+8. Proteger os dados comerciais e financeiros.
+9. Evitar registros duplicados, perdas de informações e inconsistências.
+10. Manter o projeto organizado para permitir novas funcionalidades.
+
+# 2. TECNOLOGIAS E ARQUITETURA
+
+## Frontend
+
+- React.
+- Vite.
+- JavaScript, mantendo uma estrutura de código consistente.
+- CSS organizado por componentes ou módulos, evitando estilos duplicados e correções sobrepostas.
+- Layout responsivo para computador, tablet e celular.
+- PWA (Progressive Web App), permitindo instalar o sistema nos dispositivos compatíveis.
+- Biblioteca de ícones consistente, como Lucide.
+
+## Banco de dados
+
+**Neon com PostgreSQL**, utilizando o plano gratuito inicialmente.
+
+O banco será responsável por armazenar os dados persistentes da empresa, com relacionamentos, restrições, transações e regras de integridade.
+
+O projeto deverá considerar os limites do plano gratuito, incluindo armazenamento, computação, conexões e eventuais períodos de inatividade.
+
+O Neon não será tratado como solução completa de backend: ele fornece o banco de dados, mas não substitui a API, o sistema de autenticação nem a hospedagem do aplicativo.
+
+## Backend
+
+Utilizar uma API em Node.js com Express, ou outra solução equivalente somente se houver uma justificativa técnica clara.
+
+O backend será responsável por:
+
+- Receber e validar as solicitações do frontend.
+- Aplicar as regras de negócio.
+- Autenticar os usuários e verificar suas permissões.
+- Acessar o PostgreSQL com segurança.
+- Gerar numeração única de documentos.
+- Executar operações financeiras e comerciais em transações.
+- Registrar operações relevantes.
+- Controlar a sincronização dos dados.
+- Retornar erros claros e padronizados.
+
+As credenciais privilegiadas do banco nunca poderão ficar expostas no código do frontend.
+
+## Autenticação
+
+O sistema deverá possuir login individual para até cinco usuários.
+
+A solução de autenticação deverá ser escolhida e documentada antes da implementação. Poderá utilizar um serviço de autenticação compatível ou autenticação própria implementada de maneira segura no backend.
+
+Não armazenar senhas em texto puro. Utilizar mecanismos seguros de hash de senha, sessões ou tokens adequadamente protegidos, recuperação de acesso e encerramento de sessão.
+
+## Hospedagem
+
+A hospedagem do frontend e do backend ainda deverá ser definida.
+
+A preferência é utilizar serviços gratuitos durante o desenvolvimento e, se possível, na operação inicial.
+
+Antes da publicação, verificar:
+
+- Limites dos planos gratuitos.
+- Suspensão por inatividade.
+- Disponibilidade do backend.
+- Limites de execução e armazenamento.
+- Custos de tráfego e de serviços externos.
+- Procedimentos de implantação e recuperação.
+
+Não afirmar que o sistema possui hospedagem permanente gratuita sem verificar as condições reais dos serviços escolhidos.
+
+# 3. USUÁRIOS, EMPRESA E ACESSO
+
+## Requisitos
+
+- Cadastro ou provisionamento de até cinco usuários.
+- Login individual.
+- Senha individual.
+- Encerramento de sessão.
+- Recuperação de senha, quando suportada pela solução escolhida.
+- Compartilhamento dos dados da mesma empresa entre os usuários autorizados.
+- Identificação de quem realizou operações importantes.
+- Proteção contra acesso não autorizado.
+
+Os dados comerciais devem pertencer à empresa, não a um dispositivo ou usuário isolado.
+
+O sistema deverá estar preparado para associar os registros à empresa correspondente, evitando que usuários de uma empresa tenham acesso aos dados de outra.
+
+## Permissões
+
+O modelo inicial deverá ser simples, sem um sistema complexo de cargos.
+
+Entretanto, operações sensíveis, como cancelamentos, exclusões, alterações financeiras e gerenciamento de usuários, precisam de regras de autorização definidas.
+
+O limite de cinco usuários não significa que qualquer usuário possa acessar ou modificar tudo indiscriminadamente.
+
+# 4. ESTRUTURA PRINCIPAL DO SISTEMA
+
+O menu deverá apresentar os módulos de maneira clara e organizada.
+
+1. Painel inicial.
+2. Clientes.
+3. Produtos e materiais.
+4. Serviços.
+5. Fornecedores.
+6. Orçamentos.
+7. Vendas.
+8. Ordens de serviço.
+9. Estoque.
+10. Financeiro.
+11. Agenda.
+12. Relatórios.
+13. Histórico de atividades.
+14. Configurações.
+15. Usuários e acesso.
+16. Estado da conexão e sincronização.
+
+Os módulos poderão ser liberados conforme o plano contratado e a etapa de desenvolvimento.
+
+# 5. PAINEL INICIAL
+
+O painel deverá apresentar um resumo da situação da empresa.
+
+## Indicadores
+
+- Quantidade de orçamentos em aberto.
+- Orçamentos aprovados.
+- Vendas realizadas.
+- Ordens de serviço pendentes.
+- Serviços em andamento.
+- Receitas do período.
+- Despesas do período.
+- Saldo financeiro calculado a partir dos lançamentos registrados.
+- Contas a pagar próximas do vencimento.
+- Contas a receber próximas do vencimento.
+- Produtos com estoque baixo, quando o módulo estiver disponível.
+- Próximos compromissos e serviços agendados.
+
+## Ações rápidas
+
+- Novo orçamento.
+- Nova venda.
+- Nova ordem de serviço.
+- Cadastrar cliente.
+- Registrar receita.
+- Registrar despesa.
+
+## Filtros
+
+Os indicadores deverão permitir filtros por período quando aplicável, como hoje, últimos sete dias, mês atual e período personalizado.
+
+Todos os indicadores deverão utilizar dados reais do banco, e não números fictícios ou valores fixos no código.
+
+# 6. CADASTRO DE CLIENTES
+
+## Dados do cliente
+
+- Nome ou razão social.
+- Tipo de cliente, se necessário.
+- CPF ou CNPJ, opcional conforme a necessidade.
+- Telefone.
+- E-mail.
+- Endereço.
+- Bairro.
+- Cidade.
+- Estado.
+- CEP.
+- Observações.
+- Data de cadastro.
+
+## Funcionalidades
+
+- Cadastrar cliente.
+- Visualizar detalhes.
+- Editar cadastro.
+- Pesquisar por nome, documento ou telefone.
+- Filtrar e ordenar a listagem.
+- Consultar o histórico comercial.
+- Identificar orçamentos, vendas e serviços associados.
+- Verificar vínculos antes de excluir um cadastro.
+
+A exclusão não deverá apagar silenciosamente o histórico de documentos e movimentações. Quando houver registros vinculados, priorizar desativação ou arquivamento.
+
+# 7. PRODUTOS, MATERIAIS E SERVIÇOS
+
+O sistema deverá distinguir produtos ou materiais físicos de serviços prestados.
+
+## Produtos e materiais
+
+Cada item poderá conter:
+
+- Código interno.
+- Nome.
+- Descrição.
+- Categoria.
+- Unidade de medida.
+- Custo de aquisição.
+- Preço de venda.
+- Estoque atual, quando o módulo estiver habilitado.
+- Estoque mínimo.
+- Fornecedor associado.
+- Situação: ativo ou inativo.
+
+## Serviços
+
+Cada serviço poderá conter:
+
+- Código interno.
+- Nome.
+- Descrição.
+- Categoria.
+- Preço sugerido.
+- Unidade ou modalidade de cobrança.
+- Tempo estimado, quando aplicável.
+- Situação: ativo ou inativo.
+
+## Funcionalidades
+
+- Criar, editar e pesquisar itens.
+- Categorizar produtos e serviços.
+- Utilizar os itens nos orçamentos, vendas e ordens de serviço.
+- Manter o histórico de preços quando necessário.
+- Impedir que alterações no cadastro modifiquem indevidamente documentos antigos.
+
+Os documentos emitidos deverão preservar a descrição, quantidade e preço utilizados no momento de sua criação.
+
+# 8. FORNECEDORES
+
+O cadastro de fornecedores deverá conter:
+
+- Nome ou razão social.
+- CPF ou CNPJ, quando necessário.
+- Telefone.
+- E-mail.
+- Endereço.
+- Observações.
+- Situação do cadastro.
+
+O sistema deverá permitir relacionar fornecedores aos produtos e às compras ou entradas de estoque, conforme o escopo implementado.
+
+# 9. ORÇAMENTOS
+
+Este é um dos módulos centrais do sistema.
+
+## Criação de orçamento
+
+O usuário poderá:
+
+1. Selecionar um cliente cadastrado ou cadastrar um novo.
+2. Adicionar produtos, materiais e serviços.
+3. Informar quantidades.
+4. Informar ou ajustar preços unitários.
+5. Adicionar mão de obra.
+6. Aplicar descontos.
+7. Adicionar observações e condições comerciais.
+8. Definir validade.
+9. Conferir o resumo financeiro.
+10. Salvar, gerar PDF e compartilhar o documento.
+
+## Cálculos
+
+Cada item deverá possuir quantidade, preço unitário e subtotal.
+
+O subtotal geral será a soma dos itens, incluindo materiais e serviços.
+
+O total deverá considerar os descontos e os acréscimos aplicáveis, quando existirem.
+
+Os cálculos deverão ser validados também no backend, utilizando regras de arredondamento monetário consistentes.
+
+## Numeração automática
+
+Cada orçamento receberá um número sequencial único.
+
+A numeração será gerada no backend ou no banco de dados, de forma segura para acessos simultâneos.
+
+Não gerar números exclusivamente com base na quantidade de registros existentes.
+
+Orçamentos criados offline poderão utilizar identificadores temporários únicos até que o servidor atribua o número definitivo. O sistema deverá evitar que dois dispositivos emitam números definitivos iguais.
+
+## Status
+
+- Rascunho.
+- Enviado.
+- Aprovado.
+- Recusado.
+- Expirado.
+- Cancelado.
+
+As transições deverão respeitar as regras de negócio. A aprovação deverá registrar a data e o usuário responsável quando aplicável.
+
+## Outras funcionalidades
+
+- Editar orçamento enquanto permitido.
+- Duplicar orçamento.
+- Consultar histórico.
+- Pesquisar por número ou cliente.
+- Filtrar por status e período.
+- Registrar observações.
+- Gerar PDF.
+- Compartilhar por WhatsApp ou outros aplicativos usando os recursos disponíveis no dispositivo.
+- Converter orçamento aprovado em venda ou ordem de serviço, conforme o fluxo escolhido.
+
+A conversão deverá preservar os vínculos e impedir que a mesma operação seja processada duas vezes acidentalmente.
+
+# 10. PDFS E DOCUMENTOS
+
+Os documentos deverão ter aparência profissional, legibilidade e identidade visual configurável.
+
+## Conteúdo
+
+- Nome ou marca da empresa.
+- Informações comerciais configuradas.
+- Número do documento.
+- Data de emissão.
+- Dados do cliente.
+- Descrição dos produtos e serviços.
+- Quantidades e preços.
+- Subtotais, descontos e total.
+- Condições de pagamento.
+- Prazo de validade ou execução, quando aplicável.
+- Observações.
+- Assinatura ou campo de aprovação, se necessário.
+
+## Requisitos
+
+- Layout adequado para impressão em A4.
+- Texto legível em celular.
+- Valores monetários formatados em reais.
+- Quebras de página adequadas.
+- Ausência de textos cortados ou sobrepostos.
+- Nome de arquivo identificável.
+- Visualização antes do compartilhamento, quando possível.
+
+A possibilidade de proteger PDFs com senha poderá ser incluída no plano completo, após a escolha da biblioteca de geração de documentos.
+
+O compartilhamento utilizará os recursos disponíveis no dispositivo. Não presumir que o sistema poderá enviar mensagens automaticamente pelo WhatsApp sem integração e autorização específicas.
+
+Os documentos comerciais comuns não deverão ser apresentados como documentos fiscais oficiais.
+
+# 11. VENDAS
+
+## Funcionalidades
+
+- Criar uma venda.
+- Selecionar o cliente.
+- Adicionar produtos, materiais e serviços.
+- Informar quantidades e preços.
+- Aplicar descontos autorizados.
+- Calcular o total.
+- Definir forma e condição de pagamento.
+- Registrar a situação da venda.
+- Gerar comprovante ou PDF.
+- Consultar vendas anteriores.
+- Pesquisar por número, cliente ou período.
+- Cancelar uma venda seguindo regras de auditoria.
+
+## Integrações
+
+Quando uma venda for confirmada:
+
+- Registrar o documento.
+- Gerar o lançamento financeiro correspondente, quando aplicável.
+- Dar baixa no estoque se o controle de estoque estiver habilitado e a operação exigir essa movimentação.
+- Registrar o usuário e a data da operação.
+- Impedir duplicação de lançamentos em caso de repetição da solicitação.
+
+O sistema deverá distinguir uma venda criada, uma venda confirmada, um pagamento recebido e uma venda cancelada. Esses estados não são equivalentes.
+
+# 12. ORDENS DE SERVIÇO
+
+O módulo deverá controlar os serviços executados pela empresa.
+
+## Dados
+
+- Número sequencial.
+- Cliente.
+- Endereço de execução.
+- Descrição do serviço.
+- Materiais necessários.
+- Mão de obra.
+- Valor estimado ou contratado.
+- Data de abertura.
+- Data prevista.
+- Responsável.
+- Observações.
+- Anexos ou imagens, se disponíveis.
+- Situação do serviço.
+
+## Status sugeridos
+
+- Aberta.
+- Agendada.
+- Em andamento.
+- Aguardando material.
+- Concluída.
+- Cancelada.
+
+## Ações
+
+- Criar ordem de serviço.
+- Editar informações.
+- Consultar detalhes.
+- Alterar status.
+- Registrar materiais utilizados.
+- Registrar observações.
+- Consultar histórico.
+- Gerar PDF.
+- Compartilhar com o cliente.
+- Relacionar a ordem ao orçamento, venda e financeiro.
+- Registrar a conclusão.
+
+O sistema deverá impedir baixas duplicadas de materiais quando uma ordem for editada ou sincronizada novamente.
+
+# 13. ESTOQUE
+
+O controle de estoque pertence ao plano completo, salvo decisão posterior.
+
+## Funcionalidades
+
+- Registrar entrada de produtos.
+- Registrar saída de produtos.
+- Ajustar saldo mediante justificativa.
+- Registrar movimentações.
+- Identificar origem e destino da movimentação.
+- Consultar saldo atual.
+- Consultar histórico por item.
+- Definir estoque mínimo.
+- Alertar sobre estoque baixo.
+- Relacionar movimentações a vendas e ordens de serviço.
+- Registrar usuário e data da movimentação.
+
+## Regras
+
+O saldo não deverá ser alterado diretamente sem registro da movimentação correspondente.
+
+Cada movimentação deverá ter um identificador único e uma origem rastreável.
+
+Cancelamentos e estornos deverão gerar ajustes coerentes, sem apagar o histórico.
+
+O sistema deverá definir se permite estoque negativo. A recomendação inicial é impedir saídas que ultrapassem o saldo disponível, salvo se houver autorização explícita para outra regra.
+
+A entrada de mercadorias deverá ser distinguida de uma simples alteração do cadastro de produto.
+
+# 14. FINANCEIRO
+
+O sistema deverá controlar receitas, despesas e compromissos financeiros.
+
+## Receitas
+
+- Descrição.
+- Categoria.
+- Valor.
+- Data de competência, quando aplicável.
+- Data de recebimento.
+- Forma de pagamento.
+- Cliente relacionado.
+- Documento de origem.
+- Situação do recebimento.
+- Observações.
+
+## Despesas
+
+- Descrição.
+- Categoria.
+- Valor.
+- Data de competência.
+- Data de vencimento.
+- Data de pagamento.
+- Fornecedor relacionado.
+- Forma de pagamento.
+- Situação.
+- Observações.
+
+## Contas a pagar e a receber
+
+O módulo completo deverá permitir:
+
+- Registrar contas.
+- Definir vencimentos.
+- Registrar pagamentos e recebimentos.
+- Consultar contas pendentes.
+- Identificar contas vencidas.
+- Criar parcelamentos.
+- Criar lançamentos recorrentes.
+- Consultar histórico.
+- Filtrar por período, categoria e situação.
+
+## Regras financeiras
+
+- Não registrar o mesmo pagamento duas vezes.
+- Não confundir lançamento previsto com dinheiro efetivamente recebido ou pago.
+- Preservar o histórico de alterações.
+- Calcular os totais a partir dos lançamentos válidos.
+- Relacionar lançamentos às vendas e ordens de serviço quando aplicável.
+- Tratar cancelamentos e estornos de maneira rastreável.
+- Manter consistência entre parcelas e o valor original.
+- Usar transações no banco para operações que alterem vários registros relacionados.
+
+O sistema não deverá afirmar que possui conciliação bancária automática, emissão fiscal ou integração bancária sem que esses recursos sejam realmente implementados.
+
+# 15. RECIBOS
+
+No plano completo, permitir a geração de recibos para pagamentos ou recebimentos registrados.
+
+O recibo deverá conter:
+
+- Identificação da empresa.
+- Identificação de quem pagou e de quem recebeu.
+- Valor.
+- Descrição ou motivo.
+- Data.
+- Referência ao documento relacionado.
+- Identificador ou número do recibo.
+- Campo de assinatura, quando necessário.
+
+A geração de um recibo não deverá, sozinha, registrar um segundo pagamento no financeiro.
+
+# 16. AGENDA E LEMBRETES
+
+No plano completo, disponibilizar agenda para organizar serviços e compromissos.
+
+## Funcionalidades
+
+- Agendar atendimento ou serviço.
+- Associar cliente e ordem de serviço.
+- Informar data, horário e endereço.
+- Adicionar observações.
+- Visualizar compromissos por dia, semana ou mês.
+- Alterar ou cancelar compromissos.
+- Consultar serviços próximos.
+
+Notificações locais ou por serviços externos deverão ser implementadas apenas após verificar as capacidades da plataforma escolhida. Não presumir envio automático de mensagens quando o aplicativo estiver fechado.
+
+# 17. RELATÓRIOS E INDICADORES
+
+O sistema completo deverá oferecer relatórios como:
+
+- Orçamentos por período e situação.
+- Taxa de aprovação de orçamentos, quando os dados forem suficientes.
+- Vendas por período.
+- Serviços por situação.
+- Serviços concluídos.
+- Receitas por período.
+- Despesas por período.
+- Resultado financeiro conforme os critérios definidos.
+- Contas a pagar.
+- Contas a receber.
+- Movimentações de estoque.
+- Produtos abaixo do estoque mínimo.
+- Atividades realizadas por usuário, conforme as permissões.
+
+## Recursos
+
+- Filtros por data.
+- Filtros por categoria.
+- Filtros por cliente.
+- Ordenação.
+- Exportação para PDF, quando aplicável.
+- Apresentação visual de indicadores e gráficos.
+
+Todos os relatórios deverão apresentar dados reais e indicar claramente o período analisado.
+
+# 18. HISTÓRICO E AUDITORIA
+
+Operações importantes deverão deixar registros de auditoria.
+
+Exemplos:
+
+- Criação e alteração de orçamento.
+- Aprovação e cancelamento de documentos.
+- Confirmação de venda.
+- Movimentação de estoque.
+- Registro de pagamento.
+- Alteração de contas financeiras.
+- Alterações relevantes de cadastro.
+- Operações de sincronização com falha ou conflito.
+
+Os registros deverão conter, quando aplicável:
+
+- Usuário responsável.
+- Data e hora.
+- Tipo de operação.
+- Registro afetado.
+- Informações necessárias para compreender a alteração.
+
+Não armazenar senhas, tokens ou segredos nos logs.
+
+A auditoria não precisa registrar indiscriminadamente cada clique. Ela deve priorizar eventos relevantes para a integridade comercial e financeira.
+
+# 19. FUNCIONAMENTO OFFLINE
+
+O sistema deverá ser projetado para continuar funcionando em operações selecionadas quando não houver internet.
+
+## Requisitos
+
+- Abrir o aplicativo instalado, quando suportado pelo dispositivo.
+- Disponibilizar a interface essencial offline.
+- Armazenar localmente os dados necessários para o trabalho.
+- Permitir criar e editar registros compatíveis com o modo offline.
+- Marcar registros pendentes de sincronização.
+- Exibir o estado da conexão.
+- Exibir a quantidade de operações pendentes.
+- Retomar a sincronização quando a conexão voltar.
+- Informar falhas e permitir novas tentativas seguras.
+
+## Armazenamento local
+
+Utilizar uma solução apropriada, como IndexedDB, por meio de uma biblioteca confiável.
+
+Não depender exclusivamente de localStorage para armazenar grandes volumes de dados ou implementar sincronização complexa.
+
+## Sincronização
+
+Cada registro deverá possuir identificador único independente do número comercial do documento.
+
+A sincronização deverá considerar:
+
+- Identificação das alterações locais.
+- Envio das operações pendentes.
+- Confirmação do servidor.
+- Repetição segura de solicitações.
+- Tratamento de falhas.
+- Detecção de conflitos.
+- Atualização dos dados locais.
+- Registro do último sincronismo.
+- Prevenção de duplicações.
+
+A sincronização deverá ser idempotente: repetir uma operação não poderá duplicar vendas, pagamentos, baixas de estoque ou outros efeitos.
+
+## Conflitos
+
+O sistema deverá detectar quando um registro foi alterado em mais de um dispositivo.
+
+A estratégia de resolução dependerá do tipo de dado. Não aplicar simplesmente a regra de que a última alteração sempre vence em documentos financeiros ou operações de estoque.
+
+Quando necessário, solicitar revisão do usuário e preservar informações suficientes para resolver o conflito.
+
+## Limitações importantes
+
+O modo offline não garante que todos os dados estejam disponíveis em todos os dispositivos sem uma sincronização anterior.
+
+Operações offline ainda não confirmadas pelo servidor deverão ser identificadas como pendentes.
+
+A numeração comercial definitiva, as verificações globais e as operações que dependem do estado atualizado do banco precisarão de tratamento específico.
+
+O sistema deverá informar claramente quando uma ação estiver apenas salva localmente e quando estiver confirmada no servidor.
+
+# 20. SEGURANÇA E INTEGRIDADE
+
+A segurança deverá ser implementada desde a arquitetura inicial.
+
+## Requisitos
+
+- Credenciais do banco mantidas exclusivamente no backend.
+- Variáveis de ambiente para segredos.
+- Arquivo de configuração local excluído do controle de versão.
+- Validação de dados no frontend e no backend.
+- Autenticação em todas as rotas protegidas.
+- Autorização para operações sensíveis.
+- Consultas parametrizadas.
+- Restrições de integridade no banco.
+- Chaves estrangeiras e índices adequados.
+- Transações para operações relacionadas.
+- Proteção contra solicitações duplicadas.
+- Limitação de tentativas de login, conforme a solução escolhida.
+- Política segura de sessões e recuperação de acesso.
+- Registro de erros sem expor informações confidenciais.
+- Backups e procedimento de restauração documentados.
+
+## Dados comerciais
+
+Documentos e movimentações financeiras não deverão ser apagados de maneira que torne impossível compreender o histórico.
+
+Quando aplicável, utilizar cancelamento, arquivamento ou estorno.
+
+Não considerar um dado seguro apenas porque a interface não exibe o botão de edição ou exclusão. A proteção precisa existir também no backend e no banco.
+
+# 21. BACKUPS E RECUPERAÇÃO
+
+Antes da entrega, estabelecer uma estratégia de backup compatível com o plano do Neon e com o volume de dados.
+
+Verificar quais mecanismos de restauração estão incluídos no plano gratuito e quais possuem limitações.
+
+Se necessário, planejar exportações independentes do banco.
+
+Documentar:
+
+- Como criar uma cópia.
+- Onde armazená-la.
+- Como restaurá-la.
+- Como verificar a integridade após a restauração.
+- Com que frequência os backups serão realizados.
+- Quem será responsável por acompanhar o processo.
+
+Um backup só será considerado confiável depois que a restauração tiver sido testada.
+
+O armazenamento local offline não será considerado um backup suficiente do sistema.
+
+# 22. INTERFACE E IDENTIDADE VISUAL
+
+O sistema deverá ter aparência profissional e moderna, adequada a uma ferramenta comercial.
+
+## Diretrizes visuais
+
+- Interface consistente entre módulos.
+- Identidade visual própria e configurável.
+- Hierarquia visual clara.
+- Tipografia legível.
+- Ícones coerentes.
+- Uso equilibrado de cores.
+- Cards e indicadores com informações úteis.
+- Tabelas organizadas.
+- Formulários objetivos.
+- Botões de ação claramente identificados.
+- Estados de carregamento.
+- Mensagens de sucesso e erro.
+- Confirmação para operações destrutivas.
+- Layout responsivo.
+- Navegação adequada a telas pequenas.
+- Contraste e acessibilidade.
+- Ausência de elementos decorativos que prejudiquem a produtividade.
+
+Evitar excesso de espaços vazios, poluição visual, componentes improvisados e estilos CSS repetidos ou sobrepostos.
+
+Não substituir funcionalidades reais por telas demonstrativas ou botões sem ação.
+
+# 23. PLANOS COMERCIAIS DEFINIDOS
+
+O orçamento inicial considera dois planos.
+
+## Plano Essencial — R$ 800
+
+Pagamento:
+- R$ 400 na contratação.
+- R$ 400 na entrega.
+
+Escopo inicial:
+
+- Cadastro de clientes.
+- Cadastro de produtos e serviços.
+- Orçamentos com numeração automática.
+- Geração de PDF.
+- Vendas.
+- Ordens de serviço.
+- Registro básico de receitas e despesas.
+- Histórico e pesquisa de documentos.
+- Compartilhamento de documentos.
+- Interface responsiva.
+- Login simples para até cinco usuários.
+- Funcionamento offline e sincronização planejados para o escopo acordado.
+
+## Plano Completo — R$ 1.500
+
+Pagamento:
+- R$ 750 na contratação.
+- R$ 750 na entrega.
+
+Inclui os recursos do Essencial e amplia o escopo com:
+
+- Controle de estoque.
+- Entradas, saídas e histórico de movimentações.
+- Alertas de estoque baixo.
+- Contas a pagar e a receber.
+- Parcelamentos e lançamentos recorrentes.
+- Relatórios e indicadores.
+- Recibos e documentos adicionais.
+- Agenda e lembretes.
+- Filtros avançados.
+- Anexos e imagens.
+- Integração entre vendas, serviços, estoque e financeiro.
+- Personalização dos documentos.
+- Recursos adicionais de PDF, conforme a viabilidade técnica.
+
+## Observação comercial
+
+O orçamento apresentado é uma proposta inicial de escopo. Antes de prometer a entrega de todas as funcionalidades, é necessário detalhar os critérios de aceitação e confirmar a viabilidade da arquitetura, especialmente do funcionamento offline com cinco usuários.
+
+Não expandir silenciosamente o escopo contratado. Novas funcionalidades relevantes deverão ser avaliadas e negociadas.
+
+O funcionamento offline completo, a sincronização entre vários dispositivos e os testes de recuperação representam trabalho técnico significativo e não devem ser tratados como recursos triviais.
+
+# 24. CUSTOS OPERACIONAIS
+
+A preferência inicial é utilizar serviços gratuitos, pois não foi combinada uma mensalidade de hospedagem com a cliente.
+
+O projeto deverá priorizar soluções que se mantenham dentro dos limites gratuitos, sem assumir que esses limites serão permanentes ou ilimitados.
+
+Verificar os custos de:
+
+- Banco de dados.
+- Hospedagem do backend.
+- Hospedagem do frontend.
+- Autenticação.
+- Envio de e-mails para recuperação de senha.
+- Armazenamento de anexos.
+- Serviços de notificações.
+- Domínio próprio, se desejado.
+
+Não contratar serviços pagos sem autorização.
+
+Se a arquitetura escolhida não conseguir atender com segurança e confiabilidade às necessidades no plano gratuito, informar isso claramente antes da implantação. Não ocultar limitações nem criar dependência de um serviço pago sem comunicar a situação.
+
+# 25. MODELO DE DADOS
+
+A estrutura definitiva será desenhada antes de criar as telas.
+
+As entidades prováveis incluem:
+
+- companies: empresas.
+- users ou memberships: usuários e vínculo com a empresa.
+- customers: clientes.
+- suppliers: fornecedores.
+- products: produtos e materiais.
+- services: serviços.
+- quotes: orçamentos.
+- quote_items: itens de orçamento.
+- sales: vendas.
+- sale_items: itens de venda.
+- service_orders: ordens de serviço.
+- service_order_items: materiais e serviços de uma ordem.
+- stock_movements: movimentações de estoque.
+- financial_entries: lançamentos financeiros.
+- payment_installments: parcelas.
+- appointments: compromissos.
+- receipts: recibos.
+- attachments: metadados dos anexos.
+- audit_logs: histórico de operações relevantes.
+
+As entidades poderão ser ajustadas após a modelagem.
+
+Cada tabela deverá ter uma finalidade definida. Os relacionamentos deverão utilizar chaves estrangeiras quando aplicável.
+
+Registros importantes deverão ter identificadores estáveis, datas de criação e atualização e, quando necessário, informações de cancelamento e auditoria.
+
+A numeração de documentos deverá ser independente por tipo de documento e por empresa, conforme a regra comercial definida.
+
+A estrutura deverá considerar exclusão lógica, integridade referencial, índices, transações e proteção contra operações simultâneas.
+
+Não criar todas as tabelas indiscriminadamente antes de desenhar os relacionamentos e validar as regras de negócio.
+
+# 26. REGRAS DE NEGÓCIO GERAIS
+
+1. Um documento deverá manter seu histórico e os valores registrados no momento de sua emissão.
+2. Os números comerciais deverão ser únicos dentro do escopo definido.
+3. A numeração não poderá depender apenas do frontend.
+4. O total de um documento deverá ser calculado a partir de seus itens e regras comerciais.
+5. Operações financeiras deverão ser rastreáveis.
+6. Cancelamentos deverão manter histórico e tratar os efeitos relacionados.
+7. Movimentações de estoque deverão ser registradas individualmente.
+8. A conversão entre documentos deverá preservar os vínculos.
+9. A repetição de uma solicitação não deverá duplicar efeitos comerciais ou financeiros.
+10. As operações deverão respeitar as permissões do usuário.
+11. Alterações realizadas offline deverão ser identificadas como pendentes.
+12. Os conflitos de sincronização deverão ser tratados explicitamente.
+13. As informações de uma empresa não poderão ser acessadas por outra.
+14. Os erros deverão ser tratados sem apagar silenciosamente os dados.
+15. A interface nunca deverá indicar sucesso quando a operação tiver falhado.
+16. Os dados antigos deverão continuar compreensíveis mesmo quando um cadastro relacionado for alterado ou desativado.
+
+# 27. ETAPAS DE DESENVOLVIMENTO
+
+## Etapa 1 — Planejamento técnico
+
+- Confirmar o plano contratado.
+- Definir os critérios de aceitação.
+- Definir as tecnologias.
+- Escolher a autenticação.
+- Escolher a hospedagem.
+- Definir o fluxo de uso offline.
+- Desenhar o modelo de dados.
+- Identificar os custos e limites dos serviços.
+
+**Resultado esperado:** arquitetura documentada e escopo aprovado.
+
+## Etapa 2 — Preparação do ambiente
+
+- Criar o projeto React com Vite.
+- Organizar as pastas.
+- Configurar dependências.
+- Configurar o projeto Neon.
+- Criar o backend.
+- Configurar variáveis de ambiente.
+- Criar a conexão segura com o banco.
+- Preparar scripts de migração.
+
+**Resultado esperado:** aplicação e backend executando localmente e conectados ao banco de desenvolvimento.
+
+## Etapa 3 — Banco e segurança
+
+- Criar as tabelas.
+- Definir relacionamentos.
+- Criar restrições e índices.
+- Implementar autenticação.
+- Implementar autorização.
+- Criar regras para isolamento dos dados.
+- Testar operações concorrentes.
+- Configurar estratégia de backup.
+
+**Resultado esperado:** base segura e consistente para os módulos comerciais.
+
+## Etapa 4 — Estrutura visual
+
+- Criar layout principal.
+- Criar menu e navegação.
+- Criar painel inicial.
+- Criar componentes reutilizáveis.
+- Criar formulários, tabelas e modais.
+- Implementar responsividade.
+- Implementar estados de carregamento e erro.
+
+**Resultado esperado:** estrutura visual funcional e consistente.
+
+## Etapa 5 — Cadastros
+
+- Clientes.
+- Produtos e materiais.
+- Serviços.
+- Fornecedores.
+
+**Resultado esperado:** cadastros com operações completas e validações.
+
+## Etapa 6 — Orçamentos e documentos
+
+- Numeração automática.
+- Itens e cálculos.
+- Descontos.
+- Status.
+- Histórico.
+- PDF.
+- Compartilhamento.
+- Conversão para outros documentos.
+
+**Resultado esperado:** fluxo de orçamento testado do início ao fim.
+
+## Etapa 7 — Vendas e ordens de serviço
+
+- Criação e edição.
+- Numeração.
+- Status.
+- Integração com cadastros.
+- Integração com estoque e financeiro.
+- Cancelamentos e auditoria.
+
+**Resultado esperado:** fluxo comercial integrado.
+
+## Etapa 8 — Estoque e financeiro
+
+- Entradas e saídas.
+- Contas a pagar.
+- Contas a receber.
+- Pagamentos e recebimentos.
+- Parcelamentos.
+- Recorrências.
+- Relatórios.
+
+**Resultado esperado:** operações financeiras e de estoque consistentes.
+
+## Etapa 9 — Offline e sincronização
+
+- Configurar PWA.
+- Implementar armazenamento local.
+- Criar fila de operações pendentes.
+- Criar identificadores únicos.
+- Implementar sincronização idempotente.
+- Tratar conflitos.
+- Tratar falhas de conexão.
+- Exibir status da sincronização.
+- Testar dispositivos diferentes.
+
+**Resultado esperado:** comportamento offline comprovado para as operações acordadas.
+
+## Etapa 10 — Testes e implantação
+
+- Testar todos os formulários.
+- Testar cálculos.
+- Testar numeração simultânea.
+- Testar login e permissões.
+- Testar operações financeiras.
+- Testar estoque.
+- Testar sincronização.
+- Testar backup e restauração.
+- Testar diferentes tamanhos de tela.
+- Corrigir erros.
+- Publicar o frontend e backend.
+- Documentar configuração e manutenção.
+
+**Resultado esperado:** sistema validado e preparado para uso real.
+
+# 28. TESTES OBRIGATÓRIOS
+
+Antes de considerar uma funcionalidade concluída, testar pelo menos:
+
+- Cadastro, edição e consulta.
+- Dados inválidos.
+- Falha de conexão.
+- Repetição de uma operação.
+- Usuário sem autorização.
+- Dois usuários realizando operações simultaneamente.
+- Cancelamento de documentos.
+- Cálculos monetários.
+- Numeração automática.
+- Alteração de preço após a emissão de um documento.
+- Baixa e estorno de estoque.
+- Pagamento parcial e total.
+- Parcelamentos.
+- Sincronização interrompida.
+- Conflitos entre dispositivos.
+- Recuperação após falha.
+- Backup e restauração.
+
+Nenhuma funcionalidade deverá ser considerada pronta apenas porque funcionou uma vez no computador do desenvolvedor.
+
+# 29. ORGANIZAÇÃO DO CÓDIGO
+
+Manter o projeto organizado e compreensível.
+
+Separar, quando adequado:
+
+- Páginas.
+- Componentes reutilizáveis.
+- Serviços de API.
+- Validações.
+- Regras de negócio.
+- Tipos e constantes.
+- Utilitários.
+- Estilos.
+- Configuração.
+- Scripts de banco de dados.
+- Migrações.
+- Testes.
+
+Evitar:
+
+- Um único arquivo gigante para o sistema inteiro.
+- Lógica financeira espalhada pelos componentes.
+- Consultas ao banco diretamente nas telas.
+- CSS duplicado e sobreposto.
+- Dependências desnecessárias.
+- Código fictício apresentado como funcional.
+- Credenciais inseridas no código.
+- Correções improvisadas sem compreender a causa do erro.
+
+Manter um arquivo de documentação com a arquitetura, os comandos de execução, as variáveis de ambiente necessárias e o estado atual do desenvolvimento.
+
+# 30. INSTRUÇÕES PARA QUALQUER IA QUE PARTICIPAR DO PROJETO
+
+Você atuará como assistente técnico no desenvolvimento deste sistema.
+
+Siga estas regras obrigatórias:
+
+1. Leia este documento antes de sugerir mudanças.
+2. Não altere as tecnologias ou a arquitetura sem explicar a necessidade e obter aprovação.
+3. Não crie funcionalidades fora do escopo sem informar.
+4. Não invente resultados de testes.
+5. Não afirme que um recurso está concluído sem verificar seu funcionamento.
+6. Não exponha credenciais nem solicite senhas reais.
+7. Não substitua o banco por armazenamento local como solução definitiva para todos os dados.
+8. Não implemente autenticação apenas visual.
+9. Não coloque credenciais privilegiadas no frontend.
+10. Não use dados fictícios em produção.
+11. Não apague código funcional sem compreender suas dependências.
+12. Não reescreva o projeto inteiro para corrigir um problema localizado.
+13. Ao alterar um arquivo existente, considere seu conteúdo atual e suas integrações.
+14. Explique os comandos de terminal necessários e em qual pasta executá-los.
+15. Forneça código completo quando isso for necessário para evitar erros de integração.
+16. Explique as alterações em português brasileiro, de forma direta.
+17. Priorize segurança, integridade dos dados e manutenção.
+18. Considere o funcionamento em computador, celular e tablet.
+19. Trate o modo offline e a sincronização como requisitos de arquitetura, não como recursos cosméticos.
+20. Se encontrar uma limitação técnica, informe claramente em vez de insistir em uma solução inviável.
+
+## Protocolo de trabalho
+
+Ao iniciar uma nova tarefa:
+
+1. Identifique em qual etapa do projeto estamos.
+2. Verifique o estado atual dos arquivos e do banco quando estiverem disponíveis.
+3. Identifique o objetivo específico da tarefa.
+4. Liste as dependências e os possíveis riscos.
+5. Implemente apenas o necessário para essa etapa.
+6. Execute ou indique testes concretos.
+7. Informe os arquivos alterados.
+8. Informe o que foi testado e o que ainda falta.
+9. Atualize a documentação quando houver uma mudança relevante.
+
+Não tente implementar todos os módulos de uma só vez.
+
+# 31. ESTADO ATUAL E PRÓXIMO PASSO
+
+O projeto está na fase de planejamento e preparação da infraestrutura.
+
+A tecnologia escolhida para o banco de dados é Neon com PostgreSQL, inicialmente no plano gratuito.
+
+Ainda é necessário confirmar a hospedagem do backend, a solução de autenticação, o modelo definitivo de dados e a estratégia de sincronização offline.
+
+O próximo passo é configurar o ambiente de desenvolvimento e modelar o banco de dados antes de construir os módulos.
+
+A primeira entrega técnica deverá ser uma base funcional e segura, capaz de conectar o frontend ao backend e ao banco, autenticar usuários e realizar operações de teste sem expor credenciais.
+
+A partir daí, o sistema será construído em etapas, com validação de cada módulo antes de avançar.
+
+---
+
+**PRINCÍPIO CENTRAL DO PROJETO**
+
+Construir um sistema comercial confiável, organizado e profissional. A prioridade é preservar os dados da empresa, manter regras de negócio consistentes e entregar funcionalidades que realmente funcionem. A aparência visual é importante, mas nunca deve ser obtida sacrificando segurança, integridade, desempenho ou manutenção.
+
+Toda decisão técnica deve considerar o orçamento acordado, as limitações dos serviços gratuitos e a realidade de uso por até cinco pessoas em dispositivos diferentes.
