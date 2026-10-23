@@ -3,9 +3,13 @@ const hopByHopHeaders = new Set([
   'connection',
   'content-encoding',
   'content-length',
+  'forwarded',
   'host',
   'keep-alive',
   'transfer-encoding',
+  'x-forwarded-host',
+  'x-forwarded-port',
+  'x-forwarded-proto',
 ]);
 
 function getRequestBody(request) {
