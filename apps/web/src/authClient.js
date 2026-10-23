@@ -1,8 +1,14 @@
 import { createAuthClient } from '@neondatabase/neon-js/auth';
 import { BetterAuthVanillaAdapter } from '@neondatabase/neon-js/auth/vanilla/adapters';
 
-const authUrl = import.meta.env.VITE_NEON_AUTH_URL
+const neonAuthUrl = import.meta.env.VITE_NEON_AUTH_URL
   || 'https://ep-flat-sky-b6ju7s7a.neonauth.c-2.sa-east-1.aws.neon.tech/neondb/auth';
+
+// Mobile browsers can block third-party auth cookies when the app calls Neon
+// directly from a Vercel domain. The production rewrite keeps auth first-party.
+const authUrl = import.meta.env.PROD
+  ? new URL('/neon-auth', window.location.origin).toString()
+  : neonAuthUrl;
 
 export const authClient = authUrl
   ? createAuthClient(authUrl, {
