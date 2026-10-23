@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Activity, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, LayoutDashboard, LogOut, Menu, Package, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Package, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
+import { apiRequest, flushOfflineQueue, offlineQueueCount } from './apiClient.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
 const CatalogPage = lazy(() => import('./CatalogPage.jsx'));
 const QuotesPage = lazy(() => import('./QuotesPage.jsx'));
@@ -15,6 +16,8 @@ const AgendaPage = lazy(() => import('./OperationsPages.jsx').then((module) => (
 const StockPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.StockPage })));
 const AuditPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AuditPage })));
 const CompanyAccessPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.CompanyAccessPage })));
+const ReportsPage = lazy(() => import('./ReportsPage.jsx'));
+const ReceiptsPage = lazy(() => import('./ReceiptsPage.jsx'));
 
 const navigation = [
   { label: 'Visão geral', icon: LayoutDashboard, key: 'overview' },
@@ -26,6 +29,8 @@ const navigation = [
   { label: 'Ordens de serviço', icon: Bolt, key: 'orders' },
   { label: 'Estoque', icon: Package, key: 'stock' },
   { label: 'Financeiro', icon: ChartNoAxesCombined, key: 'finance' },
+  { label: 'Recibos', icon: ReceiptText, key: 'receipts' },
+  { label: 'Relatórios', icon: FileBarChart, key: 'reports' },
   { label: 'Agenda', icon: CalendarDays, key: 'agenda' },
   { label: 'Histórico', icon: Activity, key: 'audit' },
   { label: 'Configurações', icon: Settings, key: 'settings' },
@@ -34,15 +39,15 @@ const desktopNavigationGroups = [
   { label: 'PAINEL', keys: ['overview'] },
   { label: 'COMERCIAL', keys: ['customers', 'catalog', 'suppliers', 'quotes', 'sales'] },
   { label: 'OPERAÇÃO', keys: ['orders', 'stock', 'agenda'] },
-  { label: 'GESTÃO', keys: ['finance', 'audit'] },
+  { label: 'GESTÃO', keys: ['finance', 'receipts', 'reports', 'audit'] },
 ];
 
-const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', orders: 'Ordens de serviço', stock: 'Estoque', finance: 'Financeiro', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
+const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', orders: 'Ordens de serviço', stock: 'Estoque', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
 const mobilePrimaryKeys = ['overview', 'customers', 'quotes', 'sales'];
 const mobileMoreGroups = [
   { label: 'Operação', keys: ['orders', 'stock', 'finance', 'agenda'] },
   { label: 'Cadastros', keys: ['catalog', 'suppliers'] },
-  { label: 'Gestão', keys: ['audit', 'settings'] },
+  { label: 'Gestão', keys: ['receipts', 'reports', 'audit', 'settings'] },
 ];
 
 async function readAuthSessionWithRetry() {
@@ -76,15 +81,46 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authNotice, setAuthNotice] = useState('');
   const [isSignUp, setIsSignUp] = useState(true);
+  const [authView, setAuthView] = useState(new URLSearchParams(window.location.search).get('token') ? 'reset' : 'access');
   const [authBusy, setAuthBusy] = useState(false);
   const [apiStatus, setApiStatus] = useState('checking');
   const [databaseStatus, setDatabaseStatus] = useState('checking');
   const [page, setPage] = useState('overview');
   const [companyName, setCompanyName] = useState('');
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [online, setOnline] = useState(navigator.onLine);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [reminderCount, setReminderCount] = useState(0);
   const mobileMoreTriggerRef = useRef(null);
   const mobileMoreSheetRef = useRef(null);
   const hadMobileMoreOpen = useRef(false);
+
+  useEffect(() => {
+    const updateQueue = (event) => setPendingSync(event?.detail?.count ?? 0);
+    const handleOnline = async () => { setOnline(true); const result = await flushOfflineQueue(); setPendingSync(result.remaining); };
+    const handleOffline = () => setOnline(false);
+    const handleInstall = (event) => { event.preventDefault(); setInstallPrompt(event); };
+    offlineQueueCount().then(setPendingSync).catch(() => {});
+    window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline);
+    window.addEventListener('eletroagro:offline-queue', updateQueue); window.addEventListener('beforeinstallprompt', handleInstall);
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); window.removeEventListener('eletroagro:offline-queue', updateQueue); window.removeEventListener('beforeinstallprompt', handleInstall); };
+  }, []);
+
+  useEffect(() => {
+    if (!user?.company || !online) return undefined;
+    let active = true;
+    apiRequest('/api/completion/notifications').then((result) => {
+      if (!active) return;
+      const soon = (result.reminders || []).filter((item) => new Date(item.starts_at).getTime() - Date.now() <= Number(result.preferences?.reminder_minutes || 60) * 60000 && new Date(item.starts_at) > new Date());
+      setReminderCount(soon.length);
+      if (soon.length && result.preferences?.browser_notifications && 'Notification' in window && Notification.permission === 'granted') {
+        const marker = `eletroagro-reminder-${soon[0].id}`;
+        if (!sessionStorage.getItem(marker)) { new Notification('Próximo compromisso', { body: soon[0].title, icon: '/logo-eletroagro.jpeg' }); sessionStorage.setItem(marker, '1'); }
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [user?.company, online]);
 
   useEffect(() => {
     if (!mobileMoreOpen) {
@@ -209,6 +245,30 @@ export default function App() {
     }
   }
 
+  async function handlePasswordRecovery(event) {
+    event.preventDefault(); setAuthBusy(true); setAuthError(''); setAuthNotice('');
+    const email = String(new FormData(event.currentTarget).get('email') || '').trim().toLowerCase();
+    try {
+      const result = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/?reset=1` });
+      if (result?.error) throw new Error(result.error.message || 'Não foi possível enviar a recuperação.');
+      setAuthNotice('Enviamos as instruções de recuperação. Confira sua caixa de entrada e a pasta de spam.');
+    } catch (error) { setAuthError(error.message || 'Não foi possível enviar a recuperação.'); }
+    finally { setAuthBusy(false); }
+  }
+
+  async function handlePasswordReset(event) {
+    event.preventDefault(); setAuthBusy(true); setAuthError(''); setAuthNotice('');
+    const data = new FormData(event.currentTarget); const password = String(data.get('password') || ''); const confirmation = String(data.get('confirmation') || ''); const token = new URLSearchParams(window.location.search).get('token');
+    try {
+      if (password.length < 8 || password !== confirmation) throw new Error('Use pelo menos 8 caracteres e repita a mesma senha.');
+      if (!token) throw new Error('Este link de recuperação não possui um token válido. Solicite um novo link.');
+      const result = await authClient.resetPassword({ newPassword: password, token });
+      if (result?.error) throw new Error(result.error.message || 'Não foi possível alterar a senha.');
+      window.history.replaceState({}, '', window.location.pathname); setAuthView('access'); setIsSignUp(false); setAuthNotice('Senha alterada. Entre com sua nova senha.');
+    } catch (error) { setAuthError(error.message || 'Não foi possível alterar a senha.'); }
+    finally { setAuthBusy(false); }
+  }
+
   async function handleSignOut() {
     await authClient?.signOut();
     setUser(null);
@@ -220,11 +280,14 @@ export default function App() {
   }
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
-  if (!user) return <AuthScreen isSignUp={isSignUp} onToggleMode={(nextMode) => { setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} busy={authBusy} error={authError} notice={authNotice} />;
+  if (!user) return <AuthScreen view={authView} isSignUp={isSignUp} onToggleMode={(nextMode) => { setAuthView('access'); setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onForgot={() => { setAuthView('forgot'); setAuthError(''); setAuthNotice(''); }} onBack={() => { setAuthView('access'); setIsSignUp(false); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} onRecovery={handlePasswordRecovery} onReset={handlePasswordReset} busy={authBusy} error={authError} notice={authNotice} />;
   if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
   const apiLabel = apiStatus === 'online' ? 'API conectada' : apiStatus === 'checking' ? 'Verificando API' : 'API desconectada';
   const ApiIcon = apiStatus === 'online' ? Wifi : WifiOff;
+  const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', orders: 'operations', stock: 'operations', agenda: 'operations', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
+  const canUsePage = (key) => user.company?.role === 'owner' || !permissionArea[key] || user.company?.permissions?.[permissionArea[key]] !== false;
+  async function installApplication() { if (!installPrompt) return; await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null); }
 
   return (
     <div className="app-shell">
@@ -236,7 +299,7 @@ export default function App() {
         <nav aria-label="Menu principal">
           {desktopNavigationGroups.map((group) => <div className="nav-group" key={group.label}>
             <p className="nav-caption">{group.label}</p>
-            {group.keys.map((key) => {
+            {group.keys.filter(canUsePage).map((key) => {
               const { label, icon: Icon } = navigation.find((item) => item.key === key);
               const active = page === key;
               return <a className={`nav-link${active ? ' active' : ''}`} href={`#${key}`} key={key} aria-label={label} aria-current={active ? 'page' : undefined} title={label} onClick={(event) => { event.preventDefault(); setPage(key); }}>
@@ -254,10 +317,10 @@ export default function App() {
       <main className="main-content" id="inicio">
         <header className="topbar">
           <div className="breadcrumbs">Início <span>/</span> <b>{pageLabels[page] || 'Visão geral'}</b></div>
-          <div className={`connection ${apiStatus === 'online' ? 'connected' : ''}`}><ApiIcon size={15} />{apiLabel}<i /></div>
+          <div className="topbar-tools">{installPrompt && <button className="topbar-install" onClick={installApplication}><Download size={15}/>Instalar</button>}{reminderCount > 0 && <button className="topbar-reminders" onClick={() => setPage('agenda')} title="Compromissos próximos"><Bell size={15}/><b>{reminderCount}</b></button>}<div className={`connection ${online && apiStatus === 'online' ? 'connected' : ''}`}><ApiIcon size={15} />{!online ? 'Sem conexão' : pendingSync ? `${pendingSync} pendente(s)` : apiLabel}<i /></div></div>
         </header>
         <Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
-          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={() => { setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={setPage} />}
+          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={() => { setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={setPage} />}
         </Suspense>
       </main>
       {mobileMoreOpen && <>
@@ -266,17 +329,18 @@ export default function App() {
           <header><div><span>MENU</span><h2>Acesse outras áreas</h2></div><button type="button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)}><X size={19} /></button></header>
           {mobileMoreGroups.map((group) => <div className="mobile-more-group" key={group.label}>
             <h3>{group.label}</h3>
-            <div>{group.keys.map((key) => {
+            <div>{group.keys.filter(canUsePage).map((key) => {
               const item = navigation.find((entry) => entry.key === key);
               const Icon = item.icon;
               return <button type="button" className={page === key ? 'active' : ''} key={key} onClick={() => { setPage(key); setMobileMoreOpen(false); }}><Icon size={19} /><span>{item.label}</span></button>;
             })}</div>
           </div>)}
+          {installPrompt && <button className="mobile-install-app" type="button" onClick={installApplication}><Download size={18}/><span><b>Instalar aplicativo</b><small>Adicionar à tela inicial deste aparelho</small></span></button>}
           <div className="mobile-more-account"><span className="user-avatar">{(user.name || user.email || 'U').slice(0, 1).toUpperCase()}</span><span><b>{user.name || 'Usuário'}</b><small>{user.email}</small></span><button type="button" onClick={handleSignOut}><LogOut size={17} /><span>Sair</span></button></div>
         </section>
       </>}
       <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
-        {navigation.filter(({ key }) => mobilePrimaryKeys.includes(key)).map(({ label, icon: Icon, key }) => (
+        {navigation.filter(({ key }) => mobilePrimaryKeys.includes(key) && canUsePage(key)).map(({ label, icon: Icon, key }) => (
           <button className={`mobile-nav-item${page === key ? ' active' : ''}`} type="button" key={key} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>
             <Icon size={20} strokeWidth={1.9} /><span>{label}</span>
           </button>
@@ -289,7 +353,7 @@ export default function App() {
   );
 }
 
-function AuthScreen({ isSignUp, onToggleMode, onSubmit, busy, error, notice }) {
+function AuthScreen({ view, isSignUp, onToggleMode, onForgot, onBack, onSubmit, onRecovery, onReset, busy, error, notice }) {
   if (!authClient) {
     return <main className="auth-shell"><section className="auth-card"><Brand /><h1>Configuração necessária</h1><p className="auth-description">Configure VITE_NEON_AUTH_URL em apps/web/.env e reinicie o Vite para ativar o acesso.</p></section></main>;
   }
@@ -298,17 +362,18 @@ function AuthScreen({ isSignUp, onToggleMode, onSubmit, busy, error, notice }) {
       <section className="auth-card">
         <Brand />
         <p className="auth-eyebrow"><span className="auth-eyebrow-dot" /> ACESSO SEGURO</p>
-        <h1>{isSignUp ? 'Crie sua conta' : 'Bem-vindo de volta'}</h1>
-        <p className="auth-description">{isSignUp ? 'Organize sua operação em um só lugar. Cadastre seu acesso para começar.' : 'Entre para continuar no sistema de gestão da EletroAgro.'}</p>
-        <form className="auth-form" onSubmit={onSubmit}>
-          {isSignUp && <label>Nome<input name="name" type="text" autoComplete="name" minLength="2" maxLength="120" required placeholder="Seu nome" /></label>}
-          <label>E-mail<input name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="email" required placeholder="voce@empresa.com" /></label>
-          <label>Senha<input name="password" type="password" autoCapitalize="none" autoComplete={isSignUp ? 'new-password' : 'current-password'} minLength="8" required placeholder={isSignUp ? 'Pelo menos 8 caracteres' : 'Digite sua senha'} /></label>
+        <h1>{view === 'forgot' ? 'Recuperar acesso' : view === 'reset' ? 'Criar nova senha' : isSignUp ? 'Crie sua conta' : 'Bem-vindo de volta'}</h1>
+        <p className="auth-description">{view === 'forgot' ? 'Informe seu e-mail para receber o link seguro de recuperação.' : view === 'reset' ? 'Escolha uma senha nova para voltar ao sistema.' : isSignUp ? 'Organize sua operação em um só lugar. Cadastre seu acesso para começar.' : 'Entre para continuar no sistema de gestão da EletroAgro.'}</p>
+        <form className="auth-form" onSubmit={view === 'forgot' ? onRecovery : view === 'reset' ? onReset : onSubmit}>
+          {view === 'access' && isSignUp && <label>Nome<input name="name" type="text" autoComplete="name" minLength="2" maxLength="120" required placeholder="Seu nome" /></label>}
+          {view !== 'reset' && <label>E-mail<input name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="email" required placeholder="voce@empresa.com" /></label>}
+          {view !== 'forgot' && <label>{view === 'reset' ? 'Nova senha' : 'Senha'}<input name="password" type="password" autoCapitalize="none" autoComplete={view === 'reset' || isSignUp ? 'new-password' : 'current-password'} minLength="8" required placeholder={view === 'reset' || isSignUp ? 'Pelo menos 8 caracteres' : 'Digite sua senha'} /></label>}
+          {view === 'reset' && <label>Repita a nova senha<input name="confirmation" type="password" autoComplete="new-password" minLength="8" required placeholder="Digite novamente" /></label>}
           {error && <p className="auth-message error" role="alert">{error}</p>}
           {notice && <p className="auth-message notice" role="status">{notice}</p>}
-          <button className="auth-submit" type="submit" disabled={busy}>{busy ? <><span className="auth-spinner" /> Aguarde…</> : isSignUp ? 'Criar minha conta' : 'Entrar na minha conta'}</button>
+          <button className="auth-submit" type="submit" disabled={busy}>{busy ? <><span className="auth-spinner" /> Aguarde…</> : view === 'forgot' ? 'Enviar recuperação' : view === 'reset' ? 'Salvar nova senha' : isSignUp ? 'Criar minha conta' : 'Entrar na minha conta'}</button>
         </form>
-        <p className="auth-toggle">{isSignUp ? 'Já tem uma conta?' : 'Ainda não tem uma conta?'} <button type="button" onClick={() => onToggleMode(!isSignUp)}>{isSignUp ? 'Entrar' : 'Criar conta'}</button></p>
+        {view === 'access' ? <><p className="auth-toggle">{isSignUp ? 'Já tem uma conta?' : 'Ainda não tem uma conta?'} <button type="button" onClick={() => onToggleMode(!isSignUp)}>{isSignUp ? 'Entrar' : 'Criar conta'}</button></p>{!isSignUp && <p className="auth-toggle auth-forgot"><button type="button" onClick={onForgot}>Esqueci minha senha</button></p>}</> : <p className="auth-toggle"><button type="button" onClick={onBack}>Voltar para entrar</button></p>}
         <div className="auth-security"><ShieldCheck size={16} /><span><b>Acesso protegido</b><small>Seus dados ficam seguros com autenticação criptografada.</small></span></div>
       </section>
     </main>

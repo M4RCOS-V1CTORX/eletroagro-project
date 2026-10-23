@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { getAuthAccessToken } from './authClient.js';
-import { apiUrl } from './apiUrl.js';
+import { apiRequest } from './apiClient.js';
 
 const statusLabels = { draft: 'Rascunho', sent: 'Enviado', approved: 'Aprovado', rejected: 'Recusado', expired: 'Expirado', cancelled: 'Cancelado' };
 const emptyLine = () => ({ catalogItemId: '', catalogQuery: '', quantity: '1', unitPrice: '0' });
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+function pdfAccent(value, fallback) { const match = /^#([0-9a-f]{6})$/i.exec(value || ''); return match ? [0, 2, 4].map((index) => Number.parseInt(match[1].slice(index, index + 2), 16)) : fallback; }
 
 function quoteItemsToDraft(quote, options) {
   return quote.items.map((item) => {
@@ -36,7 +36,7 @@ async function createQuotePdf(quote, company) {
   const companyName = company?.name || 'EletroAgro';
   const pdfCurrency = (value) => currency.format(Number(value)).replace(/[\u00a0\u202f]/g, ' ');
   const colors = {
-    forest: [20, 92, 57], green: [42, 145, 79], blue: [29, 133, 190], gold: [226, 174, 32],
+    forest: pdfAccent(company?.document_settings?.accentColor, [20, 92, 57]), green: [42, 145, 79], blue: [29, 133, 190], gold: [226, 174, 32],
     ink: [31, 47, 53], muted: [105, 122, 127], pale: [242, 248, 244], line: [222, 232, 225], white: [255, 255, 255],
   };
   const setText = (color) => doc.setTextColor(...color);
@@ -204,7 +204,7 @@ async function createQuotePdf(quote, company) {
     fill(colors.gold); doc.rect(0, page.footerTop + 10, page.width, 1.2, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.white);
     doc.text(companyName.toUpperCase(), page.margin, page.footerTop + 16);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL', page.width / 2, page.footerTop + 16, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(company?.document_settings?.footerText || 'ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL', page.width / 2, page.footerTop + 16, { align: 'center' });
     doc.text(`${index} / ${pages}`, page.width - page.margin, page.footerTop + 16, { align: 'right' });
   }
   return { doc, filename: `orcamento-${number}-${safeFilePart(quote.customer_name)}.pdf` };
@@ -229,18 +229,6 @@ function quotePreviewTotal(lines, discount) {
 
 function displayCents(cents) { return currency.format(Number(cents) / 100); }
 
-async function apiRequest(path, options = {}) {
-  const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${apiUrl}${path}`, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
-  let response = await send(token);
-  if (response.status === 401) {
-    const freshToken = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);
-    if (freshToken && freshToken !== token) response = await send(freshToken);
-  }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || 'Não foi possível concluir a operação.');
-  return body;
-}
 
 function formatDate(value) {
   if (!value) return '—';

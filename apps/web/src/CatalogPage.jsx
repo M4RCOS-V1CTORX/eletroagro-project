@@ -1,25 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, Boxes, CirclePlus, Clock3, LoaderCircle, Package, Pencil, Search, Wrench, X } from 'lucide-react';
-import { getAuthAccessToken } from './authClient.js';
-import { apiUrl } from './apiUrl.js';
+import { apiRequest } from './apiClient.js';
 
 const emptyItem = { itemType: 'product', code: '', name: '', description: '', category: '', unit: 'un', costPrice: '0', salePrice: '0', minimumStock: '0', estimatedMinutes: '' };
 
-async function apiRequest(path, options = {}) {
-  const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${apiUrl}${path}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
-  });
-  let response = await send(token);
-  if (response.status === 401) {
-    const freshToken = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);
-    if (freshToken && freshToken !== token) response = await send(freshToken);
-  }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || 'Não foi possível concluir a operação.');
-  return body;
-}
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, ArrowDownUp, Building2, ChevronLeft, ChevronRight, CirclePlus, Eye, LoaderCircle, Pencil, Search, UserRound, Users, X } from 'lucide-react';
-import { getAuthAccessToken } from './authClient.js';
-import { apiUrl } from './apiUrl.js';
+import { apiRequest } from './apiClient.js';
 
 const emptyCustomer = {
   name: '', customerType: 'individual', taxIdentifier: '', phone: '', email: '',
@@ -25,27 +24,6 @@ const formFields = [
   { name: 'notes', label: 'Observações', type: 'textarea', wide: true, maxLength: 5000 },
 ];
 
-async function apiRequest(path, options = {}) {
-  const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${apiUrl}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...options.headers,
-    },
-  });
-  let response = await send(token);
-  if (response.status === 401) {
-    const freshToken = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);
-    if (freshToken && freshToken !== token) {
-      response = await send(freshToken);
-    }
-  }
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || 'Não foi possível concluir a operação.');
-  return payload;
-}
 
 function displayDate(value) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));

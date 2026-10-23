@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Banknote, CalendarDays, Check, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, CreditCard, Download, Eye, FileText, LoaderCircle, Plus, Search, Share2, ShoppingBag, TriangleAlert, X } from 'lucide-react';
-import { getAuthAccessToken } from './authClient.js';
-import { apiUrl } from './apiUrl.js';
+import { apiRequest } from './apiClient.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const statusLabels = { completed: 'Concluída', cancelled: 'Cancelada' };
@@ -9,19 +8,8 @@ const paymentLabels = { pending: 'A receber', partial: 'Parcial', paid: 'Recebid
 const methodLabels = { pix: 'Pix', cash: 'Dinheiro', card_debit: 'Cartão de débito', card_credit: 'Cartão de crédito', transfer: 'Transferência', boleto: 'Boleto', other: 'Outro' };
 const today = (() => { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; })();
 const emptyItem = () => ({ catalogItemId: '', isCustom: false, name: '', itemType: 'product', unit: 'un', quantity: '1', unitPrice: '0', description: '' });
+function pdfAccent(value, fallback) { const match = /^#([0-9a-f]{6})$/i.exec(value || ''); return match ? [0, 2, 4].map((index) => Number.parseInt(match[1].slice(index, index + 2), 16)) : fallback; }
 
-async function apiRequest(path, options = {}) {
-  const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${apiUrl}${path}`, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
-  let response = await send(token);
-  if (response.status === 401) {
-    const freshToken = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);
-    if (freshToken && freshToken !== token) response = await send(freshToken);
-  }
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error?.message || 'Não foi possível concluir a operação.');
-  return body;
-}
 
 function dateLabel(value) {
   if (!value) return '—';
@@ -32,7 +20,7 @@ async function createSalePdf(sale, company) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const width = 210; const margin = 17; const right = width - margin;
-  const blue = [22, 93, 139]; const green = [55, 126, 85]; const ink = [31, 48, 62]; const muted = [103, 119, 132];
+  const blue = pdfAccent(company?.document_settings?.accentColor, [22, 93, 139]); const green = [55, 126, 85]; const ink = [31, 48, 62]; const muted = [103, 119, 132];
   const text = (value, x, y, options) => doc.text(String(value ?? ''), x, y, options);
   const number = String(sale.sale_number).padStart(4, '0');
   const filePart = (sale.customer_name || 'cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
@@ -82,7 +70,7 @@ async function createSalePdf(sale, company) {
   }
   if (sale.notes) { y += 7; doc.setTextColor(...blue); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); text('OBSERVAÇÕES', margin, y); y += 5; doc.setTextColor(...muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); text(doc.splitTextToSize(sale.notes, width - margin * 2), margin, y); }
   const pageCount = doc.getNumberOfPages();
-  for (let page = 1; page <= pageCount; page += 1) { doc.setPage(page); doc.setDrawColor(222, 231, 235); doc.line(margin, 281, right, 281); doc.setTextColor(...muted); doc.setFontSize(9); doc.text('Documento comercial — não fiscal', margin, 286); doc.text(`${page} / ${pageCount}`, right, 286, { align: 'right' }); }
+  for (let page = 1; page <= pageCount; page += 1) { doc.setPage(page); doc.setDrawColor(222, 231, 235); doc.line(margin, 281, right, 281); doc.setTextColor(...muted); doc.setFontSize(9); doc.text(company?.document_settings?.footerText || 'Documento comercial — não fiscal', margin, 286); doc.text(`${page} / ${pageCount}`, right, 286, { align: 'right' }); }
   return { doc, filename: `venda-${number}-${filePart || 'cliente'}.pdf` };
 }
 

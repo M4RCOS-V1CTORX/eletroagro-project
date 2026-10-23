@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireCompanyMembership } from '../middleware/neon-auth.js';
+import { idempotencyGuard, requireAreaPermission, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const fields = {
   name: { column: 'name', max: 200, required: true },
@@ -49,7 +49,7 @@ function handleError(error, response, action) {
 
 export function createSuppliersRouter({ pool, requireAuth, requireDatabase }) {
   const router = Router();
-  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool));
+  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool), requireAreaPermission('commercial'), idempotencyGuard(pool));
   router.param('id', (request, response, next, id) => {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return response.status(400).json({ error: { code: 'INVALID_SUPPLIER_ID', message: 'Identificador de fornecedor inválido.' } });
     return next();

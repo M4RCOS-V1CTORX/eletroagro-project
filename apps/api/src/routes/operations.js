@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { requireCompanyMembership } from '../middleware/neon-auth.js';
+import { randomUUID } from 'node:crypto';
+import { idempotencyGuard, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const paymentMethods = new Set(['pix', 'cash', 'card_debit', 'card_credit', 'transfer', 'boleto', 'other']);
@@ -20,6 +21,20 @@ function quantity(value) {
   return n > 0n && n <= 999_999_999_999n ? n : null;
 }
 function quantityText(millis) { return `${millis / 1000n}.${String(millis % 1000n).padStart(3, '0')}`.replace(/\.000$/, '').replace(/(\.\d*?)0+$/, '$1'); }
+function shiftedDate(value, step, frequency = 'month') {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (frequency === 'week') date.setUTCDate(date.getUTCDate() + step * 7);
+  else {
+    const targetDay = date.getUTCDate();
+    date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + step);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(targetDay, lastDay));
+  }
+  return date.toISOString().slice(0, 10);
+}
+export const operationsTestHelpers = { validDate, money, moneyText, quantity, quantityText, shiftedDate };
 function fail(res, error, action) {
   console.error(`Falha ao ${action}:`, error.message);
   return res.status(500).json({ error: { code: 'OPERATION_FAILED', message: `Não foi possível ${action}.` } });
@@ -32,6 +47,13 @@ async function audit(db, companyId, actor, action, type, id, summary = {}) {
 export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
   const router = Router();
   router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool));
+  router.use((req, res, next) => {
+    if (req.company.role === 'owner' || req.path === '/dashboard') return next();
+    const area = req.path.startsWith('/finance') || req.path.startsWith('/purchases') ? 'finance' : req.path.startsWith('/audit') ? 'audit' : 'operations';
+    if (req.company.permissions?.[area] !== false) return next();
+    return res.status(403).json({ error: { code: 'AREA_FORBIDDEN', message: 'Seu acesso não permite usar esta área.' } });
+  });
+  router.use(idempotencyGuard(pool));
   const companyId = (req) => req.company.company_id;
   const actor = (req) => req.auth.subject;
 
@@ -107,15 +129,27 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     if(!['income','expense'].includes(type)||title.length<2||title.length>180||amount===null||amount<=0n) return res.status(400).json({error:{code:'INVALID_FINANCIAL_ENTRY',message:'Confira o tipo, a descrição e o valor do lançamento.'}});
     if(body.dueDate&&!validDate(body.dueDate)||body.competenceDate&&!validDate(body.competenceDate)) return res.status(400).json({error:{code:'INVALID_FINANCIAL_DATE',message:'Confira as datas informadas.'}});
     if(status==='settled'&&!paymentMethods.has(body.paymentMethod)) return res.status(400).json({error:{code:'INVALID_PAYMENT_METHOD',message:'Selecione uma forma de pagamento válida.'}});
+    const scheduleMode=['single','installments','recurring'].includes(body.scheduleMode)?body.scheduleMode:'single';
+    const requestedCount=scheduleMode==='single'?1:Number(body.scheduleCount);
+    if(!Number.isInteger(requestedCount)||requestedCount<1||requestedCount>120||status==='settled'&&requestedCount>1)return res.status(400).json({error:{code:'INVALID_FINANCIAL_SCHEDULE',message:'Use de 1 a 120 parcelas/recorrências e deixe lançamentos múltiplos como pendentes.'}});
+    const frequency=body.scheduleFrequency==='week'?'week':'month';
+    const recurrenceGroup=requestedCount>1?randomUUID():null;
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
-      const result=await client.query(`INSERT INTO public.financial_entries(company_id,entry_type,title,amount,competence_date,due_date,settled_at,status,payment_method,customer_id,supplier_id,notes,created_by_subject)
-        VALUES($1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),$6::date,CASE WHEN $7='settled' THEN COALESCE($8::date,CURRENT_DATE) END,$7,$9,$10,$11,$12,$13)
-        RETURNING *`,[companyId(req),type,title,moneyText(amount),body.competenceDate||null,body.dueDate||null,status,body.settledAt||null,status==='settled'?body.paymentMethod:null,type==='income'&&uuidPattern.test(body.customerId||'')?body.customerId:null,type==='expense'&&uuidPattern.test(body.supplierId||'')?body.supplierId:null,typeof body.notes==='string'?body.notes.trim().slice(0,3000):null,actor(req)]);
-      if(status==='settled') await client.query(`INSERT INTO public.financial_payments(company_id,entry_id,amount,payment_method,paid_at,created_by_subject) VALUES($1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),$6)`,[companyId(req),result.rows[0].id,moneyText(amount),body.paymentMethod,body.settledAt||null,actor(req)]);
-      await audit(client,companyId(req),actor(req),'created', 'financial_entry',result.rows[0].id,{entryType:type,title,amount:moneyText(amount)});
-      await client.query('COMMIT'); return res.status(201).json({entry:result.rows[0]});
+      const entries=[];
+      for(let index=0;index<requestedCount;index+=1){
+        const entryAmount=scheduleMode==='installments'?(amount/BigInt(requestedCount)+(index<Number(amount%BigInt(requestedCount))?1n:0n)):amount;
+        const entryTitle=requestedCount>1?`${title} · ${index+1}/${requestedCount}`:title;
+        const competenceDate=shiftedDate(body.competenceDate||new Date().toISOString().slice(0,10),index,frequency);
+        const dueDate=body.dueDate?shiftedDate(body.dueDate,index,frequency):null;
+        const result=await client.query(`INSERT INTO public.financial_entries(company_id,entry_type,title,amount,competence_date,due_date,settled_at,status,payment_method,customer_id,supplier_id,notes,created_by_subject,recurrence_group,installment_number,installment_count)
+          VALUES($1,$2,$3,$4,$5::date,$6::date,CASE WHEN $7='settled' THEN COALESCE($8::date,CURRENT_DATE) END,$7,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,[companyId(req),type,entryTitle,moneyText(entryAmount),competenceDate,dueDate,status,body.settledAt||null,status==='settled'?body.paymentMethod:null,type==='income'&&uuidPattern.test(body.customerId||'')?body.customerId:null,type==='expense'&&uuidPattern.test(body.supplierId||'')?body.supplierId:null,typeof body.notes==='string'?body.notes.trim().slice(0,3000):null,actor(req),recurrenceGroup,requestedCount>1?index+1:null,requestedCount>1?requestedCount:null]);
+        entries.push(result.rows[0]);
+        if(status==='settled') await client.query(`INSERT INTO public.financial_payments(company_id,entry_id,amount,payment_method,paid_at,created_by_subject) VALUES($1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),$6)`,[companyId(req),result.rows[0].id,moneyText(entryAmount),body.paymentMethod,body.settledAt||null,actor(req)]);
+      }
+      await audit(client,companyId(req),actor(req),'created', 'financial_entry',entries[0].id,{entryType:type,title,amount:moneyText(amount),scheduleMode,count:requestedCount});
+      await client.query('COMMIT'); return res.status(201).json({entry:entries[0],entries});
     } catch(error) { await client.query('ROLLBACK').catch(()=>{}); if(error.code==='23503')return res.status(400).json({error:{code:'INVALID_RELATED_RECORD',message:'Cliente ou fornecedor não encontrado.'}}); return fail(res,error,'registrar o lançamento'); }
     finally {client.release();}
   });

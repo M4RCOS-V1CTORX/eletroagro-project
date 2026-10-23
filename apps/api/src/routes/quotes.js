@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireCompanyMembership } from '../middleware/neon-auth.js';
+import { requireAreaPermission, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const statuses = new Set(['draft', 'sent', 'approved', 'rejected', 'expired', 'cancelled']);
 const transitions = {
@@ -88,7 +88,7 @@ function errorResponse(error, response, action) {
 
 export function createQuotesRouter({ pool, requireAuth, requireDatabase }) {
   const router = Router();
-  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool));
+  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool), requireAreaPermission('commercial'));
   router.param('id', (request, response, next, id) => {
     if (!uuidPattern.test(id)) return response.status(400).json({ error: { code: 'INVALID_QUOTE_ID', message: 'Identificador de orçamento inválido.' } });
     return next();

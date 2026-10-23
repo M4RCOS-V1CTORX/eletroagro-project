@@ -11,11 +11,17 @@ import { createQuotesRouter } from './routes/quotes.js';
 import { createSuppliersRouter } from './routes/suppliers.js';
 import { createSalesRouter } from './routes/sales.js';
 import { createOperationsRouter } from './routes/operations.js';
+import { createCompletionRouter } from './routes/completion.js';
 
 const { Pool } = pg;
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const allowedOrigin = process.env.WEB_ORIGIN || 'http://localhost:5173';
+const allowedOrigins = new Set(
+  (process.env.WEB_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
@@ -30,11 +36,25 @@ app.disable('x-powered-by');
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
-    const isVercelDeployment = typeof origin === 'string' && /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(origin);
-    callback(null, !origin || origin === allowedOrigin || origin === 'http://localhost:5173' || isVercelDeployment);
+    callback(null, !origin || allowedOrigins.has(origin) || origin === 'http://localhost:5173');
   },
 }));
-app.use(express.json({ limit: '100kb' }));
+const requestBuckets = new Map();
+app.use('/api', (request, response, next) => {
+  if (request.path.startsWith('/health')) return next();
+  const key = request.ip || request.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  if (requestBuckets.size > 5000) for (const [bucketKey, value] of requestBuckets) if (now - value.startedAt > 15 * 60_000) requestBuckets.delete(bucketKey);
+  const bucket = requestBuckets.get(key);
+  if (!bucket || now - bucket.startedAt > 15 * 60_000) {
+    requestBuckets.set(key, { startedAt: now, count: 1 });
+    return next();
+  }
+  bucket.count += 1;
+  if (bucket.count > 600) return response.status(429).json({ error: { code: 'RATE_LIMITED', message: 'Muitas solicitações. Aguarde alguns minutos e tente novamente.' } });
+  return next();
+});
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/health', (_request, response) => {
   response.json({
@@ -81,6 +101,7 @@ app.use('/api/quotes', createQuotesRouter({
 app.use('/api/suppliers', createSuppliersRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 app.use('/api/sales', createSalesRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 app.use('/api/operations', createOperationsRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
+app.use('/api/completion', createCompletionRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 
 app.use((_request, response) => {
   response.status(404).json({ error: { code: 'NOT_FOUND', message: 'Rota não encontrada.' } });

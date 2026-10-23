@@ -1,11 +1,14 @@
 {
   "name": "eletroagro",
+  "type": "module",
   "private": true,
   "version": "0.1.0",
   "scripts": {
     "dev:api": "npm --prefix apps/api run dev",
     "dev:web": "npm --prefix apps/web run dev",
     "start:api": "npm --prefix apps/api start",
-    "build:web": "npm --prefix apps/web run build"
+    "build:web": "npm --prefix apps/web run build",
+    "test": "node --test tests/*.test.js",
+    "test:db": "node tests/db-integration.mjs"
   }
 }

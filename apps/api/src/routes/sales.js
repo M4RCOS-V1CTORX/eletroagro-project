@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireCompanyMembership } from '../middleware/neon-auth.js';
+import { requireAreaPermission, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const paymentMethods = new Set(['pix', 'cash', 'card_debit', 'card_credit', 'transfer', 'boleto', 'other']);
@@ -63,7 +63,7 @@ function saleError(error, response, action) {
 
 export function createSalesRouter({ pool, requireAuth, requireDatabase }) {
   const router = Router();
-  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool));
+  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool), requireAreaPermission('commercial'));
   router.param('id', (request, response, next, id) => {
     if (!uuidPattern.test(id)) return response.status(400).json({ error: { code: 'INVALID_SALE_ID', message: 'Identificador de venda inválido.' } });
     return next();

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "db:migrate": "node src/db/migrate.js"
+    "db:migrate": "node src/db/migrate.js",
+    "db:backup": "node src/db/backup.js",
+    "db:verify-backup": "node src/db/verify-backup.js",
+    "db:restore": "node src/db/restore.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

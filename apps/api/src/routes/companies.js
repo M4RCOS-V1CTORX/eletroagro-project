@@ -3,6 +3,28 @@ import { createHash, randomBytes } from 'node:crypto';
 import { requireCompanyMembership, requireDatabase } from '../middleware/neon-auth.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const permissionKeys = ['commercial', 'operations', 'finance', 'reports', 'audit'];
+const defaultPermissions = Object.fromEntries(permissionKeys.map((key) => [key, true]));
+function normalizePermissions(input) { return Object.fromEntries(permissionKeys.map((key) => [key, input?.[key] !== false])); }
+export const companyTestHelpers = { normalizePermissions, permissionKeys };
+
+async function sendInvitationEmail({ email, companyName, code }) {
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { sent: false, reason: 'not_configured' };
+  const appUrl = (process.env.APP_URL || process.env.WEB_ORIGIN || '').split(',')[0].trim();
+  const result = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM,
+      to: [email],
+      subject: `Convite para acessar ${companyName}`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h2>Você foi convidado para ${companyName}</h2><p>Crie ou acesse sua conta com este mesmo e-mail e informe o código abaixo:</p><p style="padding:16px;background:#f2f7f5;border-radius:8px;font-size:18px;word-break:break-all"><strong>${code}</strong></p>${appUrl ? `<p><a href="${appUrl}">Abrir EletroAgro</a></p>` : ''}<p>O código expira em 7 dias.</p></div>`,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!result.ok) throw new Error(`Falha no serviço de e-mail (${result.status}).`);
+  return { sent: true };
+}
 
 export function createCompaniesRouter({ pool, requireAuth }) {
   const router = Router();
@@ -17,7 +39,7 @@ export function createCompaniesRouter({ pool, requireAuth }) {
         [request.auth.issuer, request.auth.subject, request.auth.email || '', request.auth.name || ''],
       );
       const result = await pool.query(
-        `SELECT c.id, c.name, c.tax_identifier, c.phone, c.email, m.role, m.email AS member_email,
+        `SELECT c.id, c.name, c.tax_identifier, c.phone, c.email, c.document_settings, m.role, m.permissions, m.email AS member_email,
                 m.display_name AS member_name
          FROM public.company_memberships m
          JOIN public.companies c ON c.id = m.company_id
@@ -38,8 +60,8 @@ export function createCompaniesRouter({ pool, requireAuth }) {
     if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode gerenciar acessos.' } });
     try {
       const [members, invitations] = await Promise.all([
-        pool.query(`SELECT id, email, display_name, role, is_active, created_at FROM public.company_memberships WHERE company_id=$1 ORDER BY role DESC, created_at`, [request.company.company_id]),
-        pool.query(`SELECT id, invited_email, role, expires_at, created_at FROM public.company_invitations WHERE company_id=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC`, [request.company.company_id]),
+        pool.query(`SELECT id, email, display_name, role, is_active, permissions, created_at FROM public.company_memberships WHERE company_id=$1 ORDER BY role DESC, created_at`, [request.company.company_id]),
+        pool.query(`SELECT id, invited_email, role, permissions, expires_at, created_at FROM public.company_invitations WHERE company_id=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now() ORDER BY created_at DESC`, [request.company.company_id]),
       ]);
       return response.json({ members: members.rows, invitations: invitations.rows });
     } catch (error) {
@@ -65,12 +87,25 @@ export function createCompaniesRouter({ pool, requireAuth }) {
     }
   });
 
+  router.patch('/access/members/:id/permissions', requireCompanyMembership(pool), async (request, response) => {
+    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode alterar permissões.' } });
+    if (!uuidPattern.test(request.params.id) || request.params.id === request.company.membership_id) return response.status(400).json({ error: { code: 'INVALID_MEMBER', message: 'Selecione um membro válido.' } });
+    const permissions = normalizePermissions(request.body?.permissions);
+    try {
+      const result = await pool.query(`UPDATE public.company_memberships SET permissions=$3::jsonb,updated_at=now() WHERE company_id=$1 AND id=$2 AND role='member' RETURNING id,email,display_name,is_active,permissions`, [request.company.company_id, request.params.id, JSON.stringify(permissions)]);
+      if (!result.rowCount) return response.status(404).json({ error: { code: 'MEMBER_NOT_FOUND', message: 'Membro não encontrado.' } });
+      await pool.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,$2,'permissions_updated','company_membership',$3,$4::jsonb)`, [request.company.company_id, request.auth.subject, request.params.id, JSON.stringify({ permissions })]);
+      return response.json({ member: result.rows[0] });
+    } catch (error) { console.error('Falha ao atualizar permissões:', error.message); return response.status(500).json({ error: { code: 'PERMISSIONS_UPDATE_FAILED', message: 'Não foi possível atualizar as permissões.' } }); }
+  });
+
   router.post('/invitations', requireCompanyMembership(pool), async (request, response) => {
     if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode convidar pessoas.' } });
     const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: { code: 'INVALID_INVITE_EMAIL', message: 'Informe um e-mail válido.' } });
     const code = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(code).digest('hex');
+    const permissions = normalizePermissions(request.body?.permissions);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -81,11 +116,13 @@ export function createCompaniesRouter({ pool, requireAuth }) {
       const capacity = await client.query(`SELECT (SELECT count(*) FROM public.company_memberships WHERE company_id=$1 AND is_active)::int AS members,
         (SELECT count(*) FROM public.company_invitations WHERE company_id=$1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now())::int AS invitations`, [request.company.company_id]);
       if (capacity.rows[0].members + capacity.rows[0].invitations >= 5) { await client.query('ROLLBACK'); return response.status(409).json({ error: { code: 'TEAM_LIMIT_REACHED', message: 'A empresa já usa todas as cinco vagas, incluindo convites pendentes.' } }); }
-      const invite = await client.query(`INSERT INTO public.company_invitations(company_id,invited_email,token_hash,invited_by_membership_id,expires_at)
-        VALUES($1,$2,$3,$4,now()+interval '7 days') RETURNING id,invited_email,expires_at`, [request.company.company_id,email,tokenHash,request.company.membership_id]);
+      const invite = await client.query(`INSERT INTO public.company_invitations(company_id,invited_email,token_hash,invited_by_membership_id,permissions,expires_at)
+        VALUES($1,$2,$3,$4,$5::jsonb,now()+interval '7 days') RETURNING id,invited_email,permissions,expires_at`, [request.company.company_id,email,tokenHash,request.company.membership_id,JSON.stringify(permissions)]);
       await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,$2,'invited','company_invitation',$3,$4::jsonb)`,[request.company.company_id,request.auth.subject,invite.rows[0].id,JSON.stringify({email})]);
       await client.query('COMMIT');
-      return response.status(201).json({ invitation: invite.rows[0], code });
+      let delivery = { sent: false, reason: 'not_configured' };
+      try { delivery = await sendInvitationEmail({ email, companyName: request.company.company_name, code }); } catch (emailError) { console.error('Falha ao enviar convite por e-mail:', emailError.message); delivery = { sent: false, reason: 'delivery_failed' }; }
+      return response.status(201).json({ invitation: invite.rows[0], code, delivery });
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       if (error.code === '23505') return response.status(409).json({ error: { code: 'INVITE_ALREADY_PENDING', message: 'Já existe um convite pendente para esse e-mail.' } });
@@ -118,8 +155,8 @@ export function createCompaniesRouter({ pool, requireAuth }) {
       const existing = await client.query(`SELECT 1 FROM public.company_memberships WHERE auth_issuer=$1 AND auth_subject=$2 AND is_active`, [request.auth.issuer,request.auth.subject]);
       if (existing.rowCount) { await client.query('ROLLBACK'); return response.status(409).json({ error: { code: 'ACCOUNT_ALREADY_LINKED', message: 'Esta conta já está vinculada a uma empresa.' } }); }
       await client.query('SELECT id FROM public.companies WHERE id=$1 FOR UPDATE',[invite.rows[0].company_id]);
-      const membership = await client.query(`INSERT INTO public.company_memberships(company_id,auth_issuer,auth_subject,role,email,display_name)
-        VALUES($1,$2,$3,'member',$4,$5) RETURNING id`, [invite.rows[0].company_id,request.auth.issuer,request.auth.subject,email,(request.auth.name||'').slice(0,120)]);
+      const membership = await client.query(`INSERT INTO public.company_memberships(company_id,auth_issuer,auth_subject,role,email,display_name,permissions)
+        VALUES($1,$2,$3,'member',$4,$5,$6::jsonb) RETURNING id`, [invite.rows[0].company_id,request.auth.issuer,request.auth.subject,email,(request.auth.name||'').slice(0,120),JSON.stringify(invite.rows[0].permissions || defaultPermissions)]);
       await client.query('UPDATE public.company_invitations SET accepted_at=now() WHERE id=$1',[invite.rows[0].id]);
       await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,$2,'joined','company_membership',$3,$4::jsonb)`,[invite.rows[0].company_id,request.auth.subject,membership.rows[0].id,JSON.stringify({email})]);
       await client.query('COMMIT');
@@ -174,6 +211,10 @@ export function createCompaniesRouter({ pool, requireAuth }) {
         return response.status(409).json({ error: { code: 'COMPANY_CHANGED', message: 'O nome da empresa foi alterado. Atualize a tela e tente novamente.' } });
       }
       const companyId = request.company.company_id;
+      await client.query('DELETE FROM public.idempotency_keys WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.notification_preferences WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.service_order_attachments WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.receipts WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.audit_logs WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.company_invitations WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.financial_payments WHERE company_id = $1', [companyId]);

@@ -1,22 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BriefcaseBusiness, CirclePlus, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react';
-import { getAuthAccessToken } from './authClient.js';
-import { apiUrl } from './apiUrl.js';
+import { apiRequest } from './apiClient.js';
 
 const emptyDraft = { name: '', taxIdentifier: '', phone: '', email: '', postalCode: '', street: '', streetNumber: '', addressComplement: '', neighborhood: '', city: '', state: '', notes: '' };
 
-async function apiRequest(path, options = {}) {
-  const token = await getAuthAccessToken();
-  const send = (accessToken) => fetch(`${apiUrl}${path}`, { ...options, headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
-  let response = await send(token);
-  if (response.status === 401) {
-    const fresh = await getAuthAccessToken(undefined, { forceRefresh: true }).catch(() => null);
-    if (fresh && fresh !== token) response = await send(fresh);
-  }
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error?.message || 'Não foi possível concluir a operação.');
-  return payload;
-}
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState([]);

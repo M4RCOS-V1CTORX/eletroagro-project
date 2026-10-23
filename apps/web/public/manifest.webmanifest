@@ -1,0 +1,13 @@
+{
+  "name": "EletroAgro Gestão e Operação",
+  "short_name": "EletroAgro",
+  "description": "Gestão comercial, serviços, estoque e financeiro.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f7f5",
+  "theme_color": "#174f70",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/logo-eletroagro.jpeg", "sizes": "any", "type": "image/jpeg", "purpose": "any maskable" }
+  ]
+}
