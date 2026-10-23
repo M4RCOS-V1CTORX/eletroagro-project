@@ -31,10 +31,47 @@ export default function ReportsPage() {
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `relatorio-${range.from}-${range.to}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }
   function exportPdf() {
-    const doc = new jsPDF(); doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text('Relatório gerencial', 16, 18); doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(`Período: ${range.from.split('-').reverse().join('/')} a ${range.to.split('-').reverse().join('/')}`, 16, 26);
+    const doc = new jsPDF();
+    const navy = [8, 54, 82]; const blue = [23, 109, 163]; const green = [42, 132, 103]; const gold = [194, 158, 25]; const ink = [24, 47, 61]; const muted = [101, 119, 130]; const pale = [244, 248, 250];
+    const pageWidth = doc.internal.pageSize.getWidth(); const pageHeight = doc.internal.pageSize.getHeight(); const margin = 16;
+    const period = `${range.from.split('-').reverse().join('/')} a ${range.to.split('-').reverse().join('/')}`;
+    function footer() {
+      const page = doc.internal.getNumberOfPages(); doc.setDrawColor(221, 230, 235); doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('EletroAgro - Relatório gerencial', margin, pageHeight - 8); doc.text(`Página ${page}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+    }
+    function nextPage() { footer(); doc.addPage(); y = 20; }
+    function ensureSpace(height) { if (y + height > pageHeight - 19) nextPage(); }
+    function section(title, subtitle = '') {
+      ensureSpace(subtitle ? 17 : 12); doc.setFillColor(...blue); doc.roundedRect(margin, y - 4, 3, subtitle ? 13 : 9, 1.5, 1.5, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(...navy); doc.text(title, margin + 7, y + 1);
+      if (subtitle) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...muted); doc.text(subtitle, margin + 7, y + 7); y += 16; } else y += 11;
+    }
+    function tableHeader(left, right) {
+      doc.setFillColor(...pale); doc.roundedRect(margin, y - 4, pageWidth - margin * 2, 9, 2, 2, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(left.toUpperCase(), margin + 4, y + 1); doc.text(right.toUpperCase(), pageWidth - margin - 4, y + 1, { align: 'right' }); y += 10;
+    }
+    function tableRow(label, value, note = '') {
+      ensureSpace(10); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...ink); doc.text(String(label || '-'), margin + 4, y);
+      if (note) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(String(note), margin + 4, y + 4.5); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...navy); doc.text(String(value ?? '-'), pageWidth - margin - 4, y, { align: 'right' }); doc.setDrawColor(232, 238, 241); doc.line(margin + 4, y + 6, pageWidth - margin - 4, y + 6); y += note ? 12 : 9;
+    }
+    doc.setFillColor(...navy); doc.rect(0, 0, pageWidth, 39, 'F'); doc.setFillColor(...gold); doc.rect(0, 0, 4, 39, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(177, 213, 229); doc.text('ELETROAGRO  |  INTELIGÊNCIA DO NEGÓCIO', margin, 11);
+    doc.setFontSize(22); doc.setTextColor(255, 255, 255); doc.text('Relatório gerencial', margin, 23);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(220, 235, 242); doc.text(`Período: ${period}`, margin, 31);
     const metrics = [['Vendas', brl.format(Number(data.summary.sales))], ['Receitas', brl.format(Number(data.summary.income))], ['Despesas', brl.format(Number(data.summary.expense))], ['Resultado', brl.format(result)], ['Aprovação de orçamentos', `${approvalRate.toFixed(1)}%`], ['Serviços concluídos', String(data.summary.completed_orders)]];
-    let y = 39; doc.setFontSize(12); metrics.forEach(([label, value]) => { doc.setFont('helvetica', 'bold'); doc.text(label, 16, y); doc.setFont('helvetica', 'normal'); doc.text(value, 96, y); y += 9; });
-    y += 7; doc.setFont('helvetica', 'bold'); doc.text('Evolução mensal', 16, y); y += 8; doc.setFontSize(9); (data.monthly || []).forEach((row) => { doc.setFont('helvetica', 'normal'); doc.text(`${row.month}: vendas ${brl.format(Number(row.sales))} · entradas ${brl.format(Number(row.income))} · saídas ${brl.format(Number(row.expense))}`, 16, y); y += 7; if (y > 280) { doc.addPage(); y = 18; } });
+    let y = 49; const cardWidth = (pageWidth - margin * 2 - 8) / 3; metrics.forEach(([label, value], index) => { const column = index % 3; const row = Math.floor(index / 3); const x = margin + column * (cardWidth + 4); const cardY = y + row * 26; const tone = index === 2 ? gold : index === 3 ? green : blue; doc.setFillColor(...pale); doc.roundedRect(x, cardY, cardWidth, 21, 2.5, 2.5, 'F'); doc.setFillColor(...tone); doc.roundedRect(x, cardY, 2.5, 21, 1.2, 1.2, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(label.toUpperCase(), x + 6, cardY + 7); doc.setFontSize(12.5); doc.setTextColor(...navy); doc.text(value, x + 6, cardY + 15.5); });
+    y = 108; section('Evolução mensal', 'Comparativo entre vendas, receitas e despesas'); tableHeader('Mês', 'Vendas  |  Receitas  |  Despesas');
+    (data.monthly || []).forEach((row) => tableRow(row.month.split('-').reverse().join('/'), `${brl.format(Number(row.sales))}  |  ${brl.format(Number(row.income))}  |  ${brl.format(Number(row.expense))}`));
+    y += 4; section('Orçamentos e serviços', 'Distribuição por situação no período'); tableHeader('Situação', 'Quantidade  |  Valor');
+    (data.quoteStatuses || []).forEach((row) => tableRow(`Orçamento - ${statusLabels[row.status] || row.status}`, `${row.count}  |  ${brl.format(Number(row.total))}`));
+    (data.orderStatuses || []).forEach((row) => tableRow(`Serviço - ${statusLabels[row.status] || row.status}`, row.count));
+    y += 4; section('Principais clientes'); tableHeader('Cliente', 'Vendas  |  Total');
+    if (data.topCustomers?.length) data.topCustomers.forEach((row) => tableRow(row.customer_name, `${row.sales_count}  |  ${brl.format(Number(row.total))}`)); else tableRow('Sem vendas no período', '-');
+    y += 4; section('Pontos de atenção'); tableHeader('Produto', 'Estoque  |  Mínimo');
+    if (data.lowStock?.length) data.lowStock.forEach((row) => tableRow(row.name, `${Number(row.stock)}  |  ${Number(row.minimum_stock)}`, row.code ? `Código ${row.code}` : 'Estoque abaixo do mínimo')); else tableRow('Estoque regular', 'Nenhum alerta');
+    y += 4; section('Atividade da equipe'); tableHeader('Usuário', 'Ações');
+    if (data.activity?.length) data.activity.forEach((row) => tableRow(row.actor, row.actions)); else tableRow('Sem atividade no período', '-');
+    footer();
     doc.save(`relatorio-${range.from}-${range.to}.pdf`);
   }
 
