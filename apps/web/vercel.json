@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/neon-auth/:path*",
-      "destination": "/api/neon-auth/:path*"
+      "destination": "/api/neon-auth?__neonAuthPath=:path*"
     },
     {
       "source": "/favicon.ico",
