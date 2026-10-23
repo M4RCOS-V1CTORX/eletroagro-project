@@ -1854,3 +1854,5 @@ body, body * { font-family:var(--font-sans)!important; }
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important; }
 }
+.workspace-heading-actions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0; }
+@media(max-width:760px) { .workspace-heading { align-items:flex-start;flex-direction:column; } }
