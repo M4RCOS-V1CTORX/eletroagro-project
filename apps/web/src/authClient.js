@@ -26,15 +26,16 @@ export async function getAuthAccessToken(sessionResult, { forceRefresh = false }
   if (currentSession.error) {
     throw new Error(currentSession.error.message || 'Não foi possível recuperar sua sessão. Entre novamente.');
   }
-  // `session.token` is the opaque session identifier, not a JWT. The API
-  // validates JWTs, so always request the short-lived access token endpoint.
-  // `forceRefresh` is kept for existing callers; `/token` always issues a fresh token.
-  void forceRefresh;
-  const tokenResult = await authClient.token();
-  if (tokenResult.error) {
-    throw new Error(tokenResult.error.message || 'Não foi possível renovar sua sessão. Entre novamente.');
+  // Neon Auth injects its signed JWT into session.token after authentication.
+  // Reuse it for normal requests; ask /token only when missing or refreshing.
+  let token = forceRefresh ? null : currentSession.data?.session?.token;
+  if (!token) {
+    const tokenResult = await authClient.token();
+    if (tokenResult.error) {
+      throw new Error(tokenResult.error.message || 'Não foi possível renovar sua sessão. Entre novamente.');
+    }
+    token = tokenResult.data?.token || currentSession.data?.session?.token;
   }
-  const token = tokenResult.data?.token;
   if (!token) throw new Error('Sua sessão expirou. Entre novamente.');
   return token;
 }
