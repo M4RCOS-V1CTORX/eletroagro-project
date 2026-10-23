@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { apiRequest } from './apiClient.js';
+import { addContainedImage, loadPdfLogo, pdfAccent } from './pdfDesign.js';
 
 const statusLabels = { draft: 'Rascunho', sent: 'Enviado', approved: 'Aprovado', rejected: 'Recusado', expired: 'Expirado', cancelled: 'Cancelado' };
 const emptyLine = () => ({ catalogItemId: '', catalogQuery: '', quantity: '1', unitPrice: '0' });
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-function pdfAccent(value, fallback) { const match = /^#([0-9a-f]{6})$/i.exec(value || ''); return match ? [0, 2, 4].map((index) => Number.parseInt(match[1].slice(index, index + 2), 16)) : fallback; }
-
 function quoteItemsToDraft(quote, options) {
   return quote.items.map((item) => {
     const matching = options.find((option) => option.id === item.catalog_item_id);
@@ -69,30 +68,20 @@ async function createQuotePdf(quote, company) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); setText(colors.forest); doc.text(value || 'Não informado', x + 3, y + 12);
   };
   const drawTextCard = (label, value, x, width) => {
-    const lines = doc.splitTextToSize(String(value), width - 10);
-    const height = Math.max(23, 13 + lines.length * 4.2);
-    ensureSpace(height + 4);
-    fill(colors.pale); doc.roundedRect(x, y, width, height, 2, 2, 'F');
-    fill(colors.green); doc.roundedRect(x, y, 1.2, height, 0.5, 0.5, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); setText(colors.forest); doc.text(label.toUpperCase(), x + 5, y + 7);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); setText(colors.ink); doc.text(lines, x + 5, y + 13);
-    y += height + 4;
+    const remaining = [...doc.splitTextToSize(String(value), width - 10)]; let continued = false;
+    while (remaining.length) {
+      if (page.contentBottom - y < 28) newPage();
+      const maxLines = Math.max(2, Math.floor((page.contentBottom - y - 15) / 4.2)); const lines = remaining.splice(0, maxLines); const height = Math.max(23, 13 + lines.length * 4.2);
+      fill(colors.pale); doc.roundedRect(x, y, width, height, 2, 2, 'F'); fill(colors.green); doc.roundedRect(x, y, 1.2, height, 0.5, 0.5, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); setText(colors.forest); doc.text(`${label.toUpperCase()}${continued ? ' - CONTINUAÇÃO' : ''}`, x + 5, y + 7);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); setText(colors.ink); doc.text(lines, x + 5, y + 13); y += height + 4; continued = true;
+      if (remaining.length) newPage();
+    }
   };
 
   // Clean white header with the company's own green, blue and gold identity.
   fill(colors.white); doc.rect(0, 0, page.width, 45, 'F');
-  try {
-    const response = await fetch('/logo-eletroagro.jpeg');
-    if (response.ok) {
-      const data = await response.blob();
-      const url = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(data); });
-      const image = new Image(); image.src = url;
-      await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
-      const box = { x: page.margin, y: 8, width: 28, height: 28 };
-      const ratio = Math.min(box.width / image.naturalWidth, box.height / image.naturalHeight);
-      doc.addImage(url, 'JPEG', box.x + (box.width - image.naturalWidth * ratio) / 2, box.y + (box.height - image.naturalHeight * ratio) / 2, image.naturalWidth * ratio, image.naturalHeight * ratio);
-    }
-  } catch { /* Keep the document complete if the optional logo cannot load. */ }
+  addContainedImage(doc, await loadPdfLogo(), { x: page.margin, y: 8, width: 28, height: 28 });
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(companyName.length > 24 ? 11.5 : 14); setText(colors.forest);
   doc.text(doc.splitTextToSize(companyName, 82).slice(0, 2), 48, 15);
@@ -173,19 +162,7 @@ async function createQuotePdf(quote, company) {
     quote.terms && ['Condições comerciais', quote.terms],
     quote.notes && ['Observações', quote.notes],
   ].filter(Boolean);
-  if (termsCards.length === 2) {
-    const leftWidth = (tableWidth - 5) / 2;
-    const estimate = (value, width) => Math.max(23, 13 + doc.splitTextToSize(String(value), width - 10).length * 4.2);
-    const cardHeight = Math.max(estimate(termsCards[0][1], leftWidth), estimate(termsCards[1][1], leftWidth));
-    ensureSpace(cardHeight + 8);
-    drawTextCard(termsCards[0][0], termsCards[0][1], page.margin, leftWidth);
-    const leftEnd = y;
-    y -= cardHeight + 4;
-    drawTextCard(termsCards[1][0], termsCards[1][1], page.margin + leftWidth + 5, leftWidth);
-    y = Math.max(leftEnd, y);
-  } else if (termsCards.length === 1) {
-    drawTextCard(termsCards[0][0], termsCards[0][1], page.margin, tableWidth);
-  }
+  termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
 
   ensureSpace(39);
   stroke(colors.line); doc.setLineWidth(0.35); doc.line(page.margin, y, page.width - page.margin, y); y += 8;
@@ -196,7 +173,7 @@ async function createQuotePdf(quote, company) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.ink);
   doc.text(quote.customer_name || 'Cliente', page.margin, y + 5); doc.text(companyName, page.margin + signatureWidth + signatureGap, y + 5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(colors.muted);
-  doc.text('CLIENTE  •  DATA: ____ / ____ / ______', page.margin, y + 9); doc.text('ELETROAGRO  •  RESPONSÁVEL', page.margin + signatureWidth + signatureGap, y + 9);
+  doc.text('CLIENTE  -  DATA: ____ / ____ / ______', page.margin, y + 9); doc.text('ELETROAGRO  -  RESPONSÁVEL', page.margin + signatureWidth + signatureGap, y + 9);
 
   const pages = doc.getNumberOfPages();
   for (let index = 1; index <= pages; index += 1) {
@@ -205,7 +182,7 @@ async function createQuotePdf(quote, company) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.white);
     doc.text(companyName.toUpperCase(), page.margin, page.footerTop + 16);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(company?.document_settings?.footerText || 'ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL', page.width / 2, page.footerTop + 16, { align: 'center' });
-    doc.text(`${index} / ${pages}`, page.width - page.margin, page.footerTop + 16, { align: 'right' });
+    doc.text(`Página ${index} de ${pages}`, page.width - page.margin, page.footerTop + 16, { align: 'right' });
   }
   return { doc, filename: `orcamento-${number}-${safeFilePart(quote.customer_name)}.pdf` };
 }

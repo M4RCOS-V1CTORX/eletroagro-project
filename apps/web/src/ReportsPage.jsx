@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarRange, Download, FileDown, LoaderCircle, TrendingUp } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { apiRequest } from './apiClient.js';
+import { createPdfPalette, drawPdfFooters, drawPdfHeader, drawPdfSection, drawPdfTableHeader, loadPdfLogo, PDF_PAGE } from './pdfDesign.js';
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const statusLabels = { draft: 'Rascunho', sent: 'Enviado', approved: 'Aprovado', rejected: 'Recusado', expired: 'Expirado', cancelled: 'Cancelado', open: 'Aberta', scheduled: 'Agendada', in_progress: 'Em andamento', waiting_material: 'Aguardando material', completed: 'Concluída' };
@@ -11,12 +12,13 @@ const initialFrom = () => { const date = new Date(); date.setMonth(date.getMonth
 export default function ReportsPage() {
   const [range, setRange] = useState({ from: initialFrom(), to: today() });
   const [data, setData] = useState(null);
+  const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   async function load() {
     setLoading(true); setError('');
-    try { setData(await apiRequest(`/api/completion/reports?from=${range.from}&to=${range.to}`)); }
+    try { const [report, companyResult] = await Promise.all([apiRequest(`/api/completion/reports?from=${range.from}&to=${range.to}`), apiRequest('/api/company/me')]); setData(report); setCompany(companyResult.company); }
     catch (requestError) { setError(requestError.message); }
     finally { setLoading(false); }
   }
@@ -30,36 +32,26 @@ export default function ReportsPage() {
     const blob = new Blob([`\ufeff${rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(';')).join('\n')}`], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `relatorio-${range.from}-${range.to}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }
-  function exportPdf() {
-    const doc = new jsPDF();
-    const navy = [8, 54, 82]; const blue = [23, 109, 163]; const green = [42, 132, 103]; const gold = [194, 158, 25]; const ink = [24, 47, 61]; const muted = [101, 119, 130]; const pale = [244, 248, 250];
-    const pageWidth = doc.internal.pageSize.getWidth(); const pageHeight = doc.internal.pageSize.getHeight(); const margin = 16;
+  async function exportPdf() {
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' }); const palette = createPdfPalette(company); const logo = await loadPdfLogo();
+    const pageWidth = PDF_PAGE.width; const pageHeight = PDF_PAGE.height; const margin = PDF_PAGE.margin;
     const period = `${range.from.split('-').reverse().join('/')} a ${range.to.split('-').reverse().join('/')}`;
-    function footer() {
-      const page = doc.internal.getNumberOfPages(); doc.setDrawColor(221, 230, 235); doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text('EletroAgro - Relatório gerencial', margin, pageHeight - 8); doc.text(`Página ${page}`, pageWidth - margin, pageHeight - 8, { align: 'right' });
-    }
-    function nextPage() { footer(); doc.addPage(); y = 20; }
+    function nextPage() { doc.addPage(); y = drawPdfHeader(doc, { company, title: 'Relatório gerencial', subtitle: `Período: ${period}`, palette, logo: null, compact: true }); }
     function ensureSpace(height) { if (y + height > pageHeight - 19) nextPage(); }
     function section(title, subtitle = '') {
-      ensureSpace(subtitle ? 17 : 12); doc.setFillColor(...blue); doc.roundedRect(margin, y - 4, 3, subtitle ? 13 : 9, 1.5, 1.5, 'F');
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(...navy); doc.text(title, margin + 7, y + 1);
-      if (subtitle) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...muted); doc.text(subtitle, margin + 7, y + 7); y += 16; } else y += 11;
+      ensureSpace(subtitle ? 17 : 12); y = drawPdfSection(doc, y, title, subtitle, palette);
     }
     function tableHeader(left, right) {
-      doc.setFillColor(...pale); doc.roundedRect(margin, y - 4, pageWidth - margin * 2, 9, 2, 2, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(left.toUpperCase(), margin + 4, y + 1); doc.text(right.toUpperCase(), pageWidth - margin - 4, y + 1, { align: 'right' }); y += 10;
+      y = drawPdfTableHeader(doc, y - 4, [{ label: left, x: margin + 4 }, { label: right, x: pageWidth - margin - 4, align: 'right' }], palette) - 2;
     }
     function tableRow(label, value, note = '') {
-      ensureSpace(10); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...ink); doc.text(String(label || '-'), margin + 4, y);
-      if (note) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...muted); doc.text(String(note), margin + 4, y + 4.5); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...navy); doc.text(String(value ?? '-'), pageWidth - margin - 4, y, { align: 'right' }); doc.setDrawColor(232, 238, 241); doc.line(margin + 4, y + 6, pageWidth - margin - 4, y + 6); y += note ? 12 : 9;
+      ensureSpace(10); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...palette.ink); doc.text(String(label || '-'), margin + 4, y);
+      if (note) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...palette.muted); doc.text(String(note), margin + 4, y + 4.5); }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...palette.navy); doc.text(String(value ?? '-'), pageWidth - margin - 4, y, { align: 'right' }); doc.setDrawColor(...palette.line); doc.line(margin + 4, y + 6, pageWidth - margin - 4, y + 6); y += note ? 12 : 9;
     }
-    doc.setFillColor(...navy); doc.rect(0, 0, pageWidth, 39, 'F'); doc.setFillColor(...gold); doc.rect(0, 0, 4, 39, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(177, 213, 229); doc.text('ELETROAGRO  |  INTELIGÊNCIA DO NEGÓCIO', margin, 11);
-    doc.setFontSize(22); doc.setTextColor(255, 255, 255); doc.text('Relatório gerencial', margin, 23);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(220, 235, 242); doc.text(`Período: ${period}`, margin, 31);
+    drawPdfHeader(doc, { company, title: 'Relatório gerencial', subtitle: `Período: ${period}`, palette, logo });
     const metrics = [['Vendas', brl.format(Number(data.summary.sales))], ['Receitas', brl.format(Number(data.summary.income))], ['Despesas', brl.format(Number(data.summary.expense))], ['Resultado', brl.format(result)], ['Aprovação de orçamentos', `${approvalRate.toFixed(1)}%`], ['Serviços concluídos', String(data.summary.completed_orders)]];
-    let y = 49; const cardWidth = (pageWidth - margin * 2 - 8) / 3; metrics.forEach(([label, value], index) => { const column = index % 3; const row = Math.floor(index / 3); const x = margin + column * (cardWidth + 4); const cardY = y + row * 26; const tone = index === 2 ? gold : index === 3 ? green : blue; doc.setFillColor(...pale); doc.roundedRect(x, cardY, cardWidth, 21, 2.5, 2.5, 'F'); doc.setFillColor(...tone); doc.roundedRect(x, cardY, 2.5, 21, 1.2, 1.2, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...muted); doc.text(label.toUpperCase(), x + 6, cardY + 7); doc.setFontSize(12.5); doc.setTextColor(...navy); doc.text(value, x + 6, cardY + 15.5); });
+    let y = 49; const cardWidth = (pageWidth - margin * 2 - 8) / 3; metrics.forEach(([label, value], index) => { const column = index % 3; const row = Math.floor(index / 3); const x = margin + column * (cardWidth + 4); const cardY = y + row * 26; const tone = index === 2 ? palette.gold : index === 3 ? palette.green : palette.accent; doc.setFillColor(...palette.pale); doc.roundedRect(x, cardY, cardWidth, 21, 2.5, 2.5, 'F'); doc.setFillColor(...tone); doc.roundedRect(x, cardY, 2.5, 21, 1.2, 1.2, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...palette.muted); doc.text(label.toUpperCase(), x + 6, cardY + 7); doc.setFontSize(12.5); doc.setTextColor(...palette.navy); doc.text(value, x + 6, cardY + 15.5); });
     y = 108; section('Evolução mensal', 'Comparativo entre vendas, receitas e despesas'); tableHeader('Mês', 'Vendas  |  Receitas  |  Despesas');
     (data.monthly || []).forEach((row) => tableRow(row.month.split('-').reverse().join('/'), `${brl.format(Number(row.sales))}  |  ${brl.format(Number(row.income))}  |  ${brl.format(Number(row.expense))}`));
     y += 4; section('Orçamentos e serviços', 'Distribuição por situação no período'); tableHeader('Situação', 'Quantidade  |  Valor');
@@ -71,7 +63,7 @@ export default function ReportsPage() {
     if (data.lowStock?.length) data.lowStock.forEach((row) => tableRow(row.name, `${Number(row.stock)}  |  ${Number(row.minimum_stock)}`, row.code ? `Código ${row.code}` : 'Estoque abaixo do mínimo')); else tableRow('Estoque regular', 'Nenhum alerta');
     y += 4; section('Atividade da equipe'); tableHeader('Usuário', 'Ações');
     if (data.activity?.length) data.activity.forEach((row) => tableRow(row.actor, row.actions)); else tableRow('Sem atividade no período', '-');
-    footer();
+    drawPdfFooters(doc, { company, palette, text: 'Indicadores gerenciais - uso interno' });
     doc.save(`relatorio-${range.from}-${range.to}.pdf`);
   }
 
