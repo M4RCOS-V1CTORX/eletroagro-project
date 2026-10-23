@@ -292,10 +292,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#inicio" aria-label="EletroAgro início">
-          <img className="brand-logo" src="/logo-eletroagro.jpeg" alt="EletroAgro Soluções" />
+        <a className="brand sidebar-brand" href="#inicio" aria-label={`${companyName || 'EletroAgro'} — início`}>
+          <span className="brand-monogram" aria-hidden="true">EA</span>
         </a>
-        <div className="company-chip"><span className="company-avatar">EA</span><span><b>{companyName || 'Minha empresa'}</b><small>Ambiente local</small></span><span className="chevron">⌄</span></div>
+        <div className="sidebar-company-title" title={companyName || 'Minha empresa'}><small>EMPRESA</small><strong>{companyName || 'Minha empresa'}</strong></div>
         <nav aria-label="Menu principal">
           {desktopNavigationGroups.map((group) => <div className="nav-group" key={group.label}>
             <p className="nav-caption">{group.label}</p>

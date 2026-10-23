@@ -1585,6 +1585,14 @@ body, body * { font-family:var(--font-sans)!important; }
 
 /* Login and company marks: keep the complete square logo visible at every size. */
 .brand-logo { object-fit:contain;object-position:center;padding:6px;background:#fff; }
+.sidebar-brand { display:grid;place-items:center;margin:0 0 17px;padding:0;text-decoration:none; }
+.brand-monogram { position:relative;width:112px;height:112px;display:grid;place-items:center;overflow:hidden;border:1px solid #ffffffa8;border-radius:24px;background:#fff;color:#174a70;box-shadow:0 15px 34px #082b4238;font-size:34px;font-weight:900;letter-spacing:-2.5px;line-height:1; }
+.brand-monogram::before { position:absolute;inset:9px;border:1px solid #dce9ef;border-radius:17px;content:""; }
+.brand-monogram::after { position:absolute;right:22px;bottom:16px;left:22px;height:4px;border-radius:999px;background:linear-gradient(90deg,#176da3,#398459 70%,#e4bd2d);content:""; }
+.sidebar-company-title { min-width:0;margin:0 7px 17px;padding:0 5px 15px;border-bottom:1px solid #ffffff1c; }
+.sidebar-company-title small { display:block;margin-bottom:5px;color:#94b4c7;font-size:8px;font-weight:800;letter-spacing:1.7px; }
+.sidebar-company-title strong { display:block;overflow:hidden;color:#fff;font-size:17px;font-weight:800;letter-spacing:-.35px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap; }
+@media(max-width:760px) { .sidebar-brand { margin-bottom:18px;padding-bottom:18px; }.brand>span.brand-monogram:last-child { width:48px;height:48px;display:grid;border-radius:12px;font-size:17px;letter-spacing:-1px; }.brand-monogram::before { inset:4px;border-radius:8px; }.brand-monogram::after { right:10px;bottom:6px;left:10px;height:2px; }.sidebar-company-title { display:none; } }
 .auth-shell,.auth-loading { min-height:100vh;min-height:100svh;padding:clamp(16px,4vw,38px);background:radial-gradient(ellipse at 8% 10%,#e3f1f4 0,transparent 40%),radial-gradient(ellipse at 92% 88%,#edf4df 0,transparent 36%),linear-gradient(135deg,#f5f8f7,#eef4f4); }
 .auth-card { position:relative;width:min(100%,460px);padding:clamp(24px,5vw,38px);overflow:hidden;border:1px solid #dce8e6;border-radius:24px;background:#fff;box-shadow:0 28px 80px #123a3518; }
 .auth-card::before { position:absolute;inset:0 0 auto;height:5px;background:linear-gradient(90deg,#176da3 0%,#398459 72%,#e4bd2d 100%);content:""; }
