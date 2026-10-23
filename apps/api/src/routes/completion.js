@@ -98,7 +98,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
         JOIN public.companies co ON co.id=p.company_id
         LEFT JOIN public.customers c ON c.company_id=f.company_id AND c.id=f.customer_id
         LEFT JOIN public.suppliers s ON s.company_id=f.company_id AND s.id=f.supplier_id
-        WHERE p.company_id=$1 AND p.id=$2 FOR UPDATE`, [request.company.company_id, request.body.paymentId]);
+        WHERE p.company_id=$1 AND p.id=$2 FOR UPDATE OF p,f`, [request.company.company_id, request.body.paymentId]);
       if (!payment.rowCount) { await client.query('ROLLBACK'); return response.status(404).json({ error: { code: 'PAYMENT_NOT_FOUND', message: 'Pagamento não encontrado.' } }); }
       const item = payment.rows[0];
       const payerName = String(request.body.payerName || (item.entry_type === 'income' ? item.customer_name : item.company_name) || 'Não informado').trim().slice(0, 200);

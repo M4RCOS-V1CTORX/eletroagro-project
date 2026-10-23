@@ -15,9 +15,17 @@ try {
   assert.equal(membership.permissions.finance, true);
   const entry = (await client.query(`INSERT INTO public.financial_entries(company_id,entry_type,title,amount,competence_date,due_date,status,created_by_subject,recurrence_group,installment_number,installment_count) VALUES($1,'income','Parcela de validação',100,CURRENT_DATE,CURRENT_DATE,'pending','test-subject',gen_random_uuid(),1,2) RETURNING id`, [company.id])).rows[0];
   const payment = (await client.query(`INSERT INTO public.financial_payments(company_id,entry_id,amount,payment_method,paid_at,created_by_subject) VALUES($1,$2,50,'pix',CURRENT_DATE,'test-subject') RETURNING id`, [company.id, entry.id])).rows[0];
-  const counter = (await client.query(`INSERT INTO public.document_counters(company_id,document_type,last_number) VALUES($1,'receipt',1) RETURNING last_number`, [company.id])).rows[0];
-  const receipt = (await client.query(`INSERT INTO public.receipts(company_id,receipt_number,financial_entry_id,payment_id,payer_name,payee_name,description,amount,paid_at,payment_method,created_by_subject) VALUES($1,$2,$3,$4,'Cliente Teste','Validação EletroAgro','Recebimento de teste',50,CURRENT_DATE,'pix','test-subject') RETURNING id,receipt_number`, [company.id, counter.last_number, entry.id, payment.id])).rows[0];
+  const paymentDetail = (await client.query(`SELECT p.*,f.title,f.entry_type,c.name AS customer_name,s.name AS supplier_name,co.name AS company_name
+    FROM public.financial_payments p JOIN public.financial_entries f ON f.company_id=p.company_id AND f.id=p.entry_id
+    JOIN public.companies co ON co.id=p.company_id LEFT JOIN public.customers c ON c.company_id=f.company_id AND c.id=f.customer_id
+    LEFT JOIN public.suppliers s ON s.company_id=f.company_id AND s.id=f.supplier_id WHERE p.company_id=$1 AND p.id=$2 FOR UPDATE OF p,f`, [company.id, payment.id])).rows[0];
+  const counter = (await client.query(`INSERT INTO public.document_counters(company_id,document_type,last_number) VALUES($1,'receipt',1)
+    ON CONFLICT(company_id,document_type) DO UPDATE SET last_number=public.document_counters.last_number+1 RETURNING last_number`, [company.id])).rows[0];
+  const receipt = (await client.query(`INSERT INTO public.receipts(company_id,receipt_number,financial_entry_id,payment_id,payer_name,payee_name,description,amount,paid_at,payment_method,signature_required,created_by_subject)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,'test-subject') ON CONFLICT(company_id,payment_id) DO UPDATE SET payer_name=EXCLUDED.payer_name,payee_name=EXCLUDED.payee_name,description=EXCLUDED.description,signature_required=EXCLUDED.signature_required RETURNING id,receipt_number`,
+    [company.id, counter.last_number, paymentDetail.entry_id, paymentDetail.id, paymentDetail.customer_name || paymentDetail.company_name, paymentDetail.company_name, paymentDetail.title, paymentDetail.amount, paymentDetail.paid_at, paymentDetail.payment_method])).rows[0];
   assert.equal(Number(receipt.receipt_number), 1);
+  await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,'test-subject','receipt_created','receipt',$2,'{"amount":"50.00"}'::jsonb)`, [company.id, receipt.id]);
   const order = (await client.query(`INSERT INTO public.service_orders(company_id,order_number,customer_name,title,estimated_total,created_by_subject) VALUES($1,1,'Cliente Teste','Serviço de validação',100,'test-subject') RETURNING id`, [company.id])).rows[0];
   const attachment = (await client.query(`INSERT INTO public.service_order_attachments(company_id,service_order_id,file_name,mime_type,byte_size,content_data,created_by_subject) VALUES($1,$2,'teste.png','image/png',8,'data:image/png;base64,dGVzdGU=','test-subject') RETURNING id`, [company.id, order.id])).rows[0];
   assert(attachment.id);
