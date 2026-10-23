@@ -224,6 +224,19 @@ export default function App() {
           {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={() => { setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={setPage} />}
         </Suspense>
       </main>
+      <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
+        {navigation.map(({ label, icon: Icon, key }) => (
+          <button className={`mobile-nav-item${page === key ? ' active' : ''}`} type="button" key={key} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>
+            <Icon size={20} strokeWidth={1.9} /><span>{label}</span>
+          </button>
+        ))}
+        <button className={`mobile-nav-item${page === 'settings' ? ' active' : ''}`} type="button" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => setPage('settings')}>
+          <Settings size={20} strokeWidth={1.9} /><span>Configurações</span>
+        </button>
+        <button className="mobile-nav-item mobile-nav-signout" type="button" onClick={handleSignOut}>
+          <LogOut size={20} strokeWidth={1.9} /><span>Sair da conta</span>
+        </button>
+      </nav>
     </div>
   );
 }

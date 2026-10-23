@@ -1,5 +1,6 @@
 :root {
-  font-family:Arial,'Segoe UI',sans-serif;
+  --font-sans: Inter, Aptos, 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:var(--font-sans);
   color:#1b2e49;
   background:#f5f8fc;
   font-synthesis:none;
@@ -1449,6 +1450,38 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .catalog-page>.customers-heading { padding:4px 0 16px 15px;border-left:4px solid #398459; }.catalog-page>.customers-heading h1 { color:#315f46; }.catalog-page .catalog-tabs { display:inline-flex;width:auto;max-width:100%;margin:0 0 14px;padding:4px;border:1px solid #e2ebe4;border-radius:11px;background:#f4f8f4; }.catalog-page .catalog-tabs button { border-radius:8px; }.catalog-page .catalog-tabs button.selected { border-bottom-color:transparent;background:#e4f1e7;color:#31764b; }
 .suppliers-page>.customers-heading { padding:18px 20px;border:1px solid #e3eadd;border-radius:13px;background:linear-gradient(105deg,#f1f7ef,#fff 76%); }.suppliers-page>.customers-heading h1 { color:#466044; }.suppliers-page>.customers-heading .customers-kicker { color:#788c61; }.suppliers-page .customers-table th { background:#f3f6ed; }.suppliers-page .customer-name { color:#55734f; }
 .quotes-page>.customers-heading { padding:5px 0 16px 15px;border-left:4px solid #d9b62e; }.quotes-page .quote-metric { min-height:105px; }.quotes-page .quote-metric:nth-child(2) { background:linear-gradient(135deg,#f5fafc,#fff); }.quotes-page .quote-metric:nth-child(3) { background:linear-gradient(135deg,#f1f8f2,#fff); }.settings-page>.customers-heading { margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid #dfe8ed; }.settings-page>.customers-heading h1 { color:#244a64; }
+
+/* Readability and responsive navigation. */
+body, body * { font-family:var(--font-sans)!important; }
+.mobile-bottom-nav { display:none; }
+@media(min-width:761px) {
+  .main-content { font-size:16px; }
+  .main-content :is(p,li,label,small,th,td,button,input,select,textarea,.workspace-eyebrow,.metric-label,.metric-note,.customer-detail,.customer-meta,.connection,.breadcrumbs) { font-size:clamp(13px,1em,17px); }
+  .main-content :is(.customers-heading p,.workspace-heading p,.auth-description) { font-size:clamp(15px,1em,17px); }
+  .main-content :is(.customers-table th,.customers-table td,.workspace-table th,.workspace-table td) { line-height:1.5; }
+}
+@media(max-width:760px) {
+  .sidebar { display:none; }
+  .main-content { width:100%;margin:0;max-width:none;padding:0 16px calc(104px + env(safe-area-inset-bottom)); }
+  .topbar { position:sticky;top:0;z-index:5;height:60px;gap:10px;background:#f4f7f9ed;backdrop-filter:blur(14px); }
+  .breadcrumbs { min-width:0;font-size:14px; }
+  .connection { flex:0 0 auto;min-height:36px;font-size:12px; }
+  .workspace-page { padding-top:22px; }
+  .main-content :is(p,li,label,small,th,td,button,input,select,textarea,.workspace-eyebrow,.metric-label,.metric-note,.customer-detail,.customer-meta,.empty-state,.workspace-message) { font-size:clamp(14px,1em,16px); }
+  .main-content :is(.customers-heading p,.workspace-heading p) { font-size:15px;line-height:1.55; }
+  .main-content :is(button,input,select,textarea) { min-height:44px; }
+  .mobile-bottom-nav { position:fixed;z-index:30;right:0;bottom:0;left:0;display:flex;gap:3px;min-height:76px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));overflow-x:auto;overscroll-behavior-x:contain;border-top:1px solid #dfe8eb;background:#fffF;box-shadow:0 -8px 24px #173c5014;scrollbar-width:thin;scroll-snap-type:x proximity; }
+  .mobile-nav-item { flex:0 0 86px;min-width:86px;min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:5px 4px;border:0;border-radius:11px;background:transparent;color:#617587;font-size:11px;font-weight:650;line-height:1.2;text-align:center;scroll-snap-align:start; }
+  .mobile-nav-item span { display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2; }
+  .mobile-nav-item.active { background:#eaf4f8;color:#176da3; }
+  .mobile-nav-signout { color:#9b5645; }
+  .workspace-heading { gap:12px;margin-bottom:18px; }
+  .workspace-heading h1,.customers-heading h1 { font-size:clamp(25px,7vw,30px);line-height:1.18; }
+  .customers-page { padding-top:22px; }
+  .customers-primary,.customers-secondary,.workspace-button { min-height:44px;padding-inline:14px;font-size:14px; }
+  .customers-table th,.customers-table td { padding:12px 10px; }
+  .workspace-modal { max-height:calc(100dvh - 32px);overflow-y:auto; }
+}
 
 /* Login and company marks: keep the complete square logo visible at every size. */
 .brand-logo { object-fit:contain;object-position:center;padding:6px;background:#fff; }
