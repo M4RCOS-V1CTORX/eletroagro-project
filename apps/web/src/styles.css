@@ -1586,15 +1586,18 @@ body, body * { font-family:var(--font-sans)!important; }
 /* Login and company marks: keep the complete square logo visible at every size. */
 .brand-logo { object-fit:contain;object-position:center;padding:6px;background:#fff; }
 .sidebar-brand { display:grid;place-items:center;margin:0 0 17px;padding:0;text-decoration:none; }
-.brand-monogram { position:relative;width:112px;height:112px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ffffffa8;border-radius:24px;background:#fff;box-shadow:0 15px 34px #082b4238;line-height:1; }
+.brand-monogram { position:relative;width:112px;height:112px;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ffffffd6;border-radius:24px;background:radial-gradient(circle at 84% 80%,#e4f5ff 0,transparent 31%),radial-gradient(circle at 18% 18%,#eff9e7 0,transparent 34%),#fff;box-shadow:0 15px 34px #082b4238,0 0 0 5px #ffffff0c;line-height:1; }
 .brand-monogram::before { position:absolute;inset:9px;border:1px solid #dce9df;border-radius:17px;content:""; }
 .brand-monogram::after { position:absolute;z-index:2;top:19px;left:50%;width:27px;height:75px;background:linear-gradient(165deg,#ffe32e 0%,#ffc400 45%,#ff8a00 100%);clip-path:polygon(58% 0,18% 47%,48% 47%,28% 100%,84% 37%,55% 37%);filter:drop-shadow(0 2px 1px #c4740038);transform:translateX(-48%) skewX(-5deg);content:""; }
 .brand-monogram>span { position:relative;z-index:1;font-size:52px;font-style:italic;font-weight:950;letter-spacing:-7px;line-height:1; }
 .monogram-e { margin-right:-2px;background:linear-gradient(145deg,#003f2c,#08752d 72%,#14952b);background-clip:text;-webkit-background-clip:text;color:transparent; }
 .monogram-a { margin-left:-2px;padding-right:5px;background:linear-gradient(145deg,#128a22,#65bf00 72%,#35a600);background-clip:text;-webkit-background-clip:text;color:transparent; }
-.sidebar-company-title { min-width:0;margin:0 7px 17px;padding:0 5px 15px;border-bottom:1px solid #ffffff1c; }
-.sidebar-company-title small { display:block;margin-bottom:5px;color:#94b4c7;font-size:8px;font-weight:800;letter-spacing:1.7px; }
-.sidebar-company-title strong { display:block;overflow:hidden;color:#fff;font-size:17px;font-weight:800;letter-spacing:-.35px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap; }
+.sidebar-company-title { position:relative;min-width:0;margin:0 3px 18px;padding:14px 15px 15px 18px;overflow:hidden;border:1px solid #ffffff24;border-radius:14px;background:linear-gradient(135deg,#ffffff14,#ffffff07);box-shadow:inset 0 1px #ffffff12,0 10px 24px #082c421e; }
+.sidebar-company-title::before { position:absolute;inset:12px auto 12px 0;width:4px;border-radius:0 5px 5px 0;background:linear-gradient(180deg,#f4d21d,#57b31c 65%,#1297d0);content:""; }
+.sidebar-company-title small { display:block;margin-bottom:7px;color:#e8ca37;font-size:8px;font-weight:850;letter-spacing:1.9px; }
+.sidebar-company-title strong { display:grid;gap:2px;overflow:hidden;line-height:1.05; }
+.sidebar-company-title strong span { color:#fff;font-size:19px;font-weight:850;letter-spacing:-.55px; }
+.sidebar-company-title strong em { color:#b9dfaa;font-size:11px;font-style:normal;font-weight:800;letter-spacing:2.1px;text-transform:uppercase; }
 @media(max-width:760px) { .sidebar-brand { margin-bottom:18px;padding-bottom:18px; }.brand>span.brand-monogram:last-child { width:48px;height:48px;display:flex;border-radius:12px; }.brand-monogram::before { inset:4px;border-radius:8px; }.brand-monogram::after { top:8px;left:50%;width:12px;height:33px; }.brand-monogram>span { font-size:23px;letter-spacing:-4px; }.monogram-a { padding-right:3px; }.sidebar-company-title { display:none; } }
 .auth-shell,.auth-loading { min-height:100vh;min-height:100svh;padding:clamp(16px,4vw,38px);background:radial-gradient(ellipse at 8% 10%,#e3f1f4 0,transparent 40%),radial-gradient(ellipse at 92% 88%,#edf4df 0,transparent 36%),linear-gradient(135deg,#f5f8f7,#eef4f4); }
 .auth-card { position:relative;width:min(100%,460px);padding:clamp(24px,5vw,38px);overflow:hidden;border:1px solid #dce8e6;border-radius:24px;background:#fff;box-shadow:0 28px 80px #123a3518; }

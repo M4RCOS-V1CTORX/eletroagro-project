@@ -295,7 +295,7 @@ export default function App() {
         <a className="brand sidebar-brand" href="#inicio" aria-label="EletroAgro Soluções — início">
           <span className="brand-monogram" aria-hidden="true"><span className="monogram-e">E</span><span className="monogram-a">A</span></span>
         </a>
-        <div className="sidebar-company-title" title="EletroAgro Soluções"><small>EMPRESA</small><strong>EletroAgro Soluções</strong></div>
+        <div className="sidebar-company-title" title="EletroAgro Soluções"><small>SEU SISTEMA</small><strong><span>EletroAgro</span><em>Soluções</em></strong></div>
         <nav aria-label="Menu principal">
           {desktopNavigationGroups.map((group) => <div className="nav-group" key={group.label}>
             <p className="nav-caption">{group.label}</p>
