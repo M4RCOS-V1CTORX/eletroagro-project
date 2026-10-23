@@ -86,7 +86,7 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState('checking');
   const [databaseStatus, setDatabaseStatus] = useState('checking');
   const [page, setPage] = useState('overview');
-  const [companyName, setCompanyName] = useState('');
+  const [companyName, setCompanyName] = useState('EletroAgro Soluções');
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const [pendingSync, setPendingSync] = useState(0);
@@ -292,10 +292,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand sidebar-brand" href="#inicio" aria-label={`${companyName || 'EletroAgro'} — início`}>
-          <span className="brand-monogram" aria-hidden="true">EA</span>
+        <a className="brand sidebar-brand" href="#inicio" aria-label="EletroAgro Soluções — início">
+          <span className="brand-monogram" aria-hidden="true"><span className="monogram-e">E</span><span className="monogram-a">A</span></span>
         </a>
-        <div className="sidebar-company-title" title={companyName || 'Minha empresa'}><small>EMPRESA</small><strong>{companyName || 'Minha empresa'}</strong></div>
+        <div className="sidebar-company-title" title="EletroAgro Soluções"><small>EMPRESA</small><strong>EletroAgro Soluções</strong></div>
         <nav aria-label="Menu principal">
           {desktopNavigationGroups.map((group) => <div className="nav-group" key={group.label}>
             <p className="nav-caption">{group.label}</p>

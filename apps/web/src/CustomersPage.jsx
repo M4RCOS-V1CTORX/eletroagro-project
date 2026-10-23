@@ -35,7 +35,6 @@ function customerTypeLabel(value) {
 
 export default function CustomersPage({ onCompanyChange }) {
   const [company, setCompany] = useState(null);
-  const [companyName, setCompanyName] = useState('');
   const [companyLoading, setCompanyLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
   const [pagination, setPagination] = useState({ total: 0, limit: 25, offset: 0 });
@@ -91,11 +90,10 @@ export default function CustomersPage({ onCompanyChange }) {
     setBusy(true);
     setError('');
     try {
-      const result = await apiRequest('/api/company', { method: 'POST', body: JSON.stringify({ name: companyName }) });
+      const result = await apiRequest('/api/company', { method: 'POST', body: JSON.stringify({ name: 'EletroAgro Soluções' }) });
       setCompany(result.company);
       onCompanyChange(result.company.name);
       setNotice('Empresa cadastrada. Agora você pode organizar seus clientes.');
-      setCompanyName('');
     } catch (saveError) {
       if (saveError.message.includes('já está vinculada')) await loadCompany();
       setError(saveError.message);
@@ -169,11 +167,10 @@ export default function CustomersPage({ onCompanyChange }) {
       <div className="company-setup-card">
         <span className="customers-kicker">PRIMEIRO ACESSO</span>
         <span className="company-setup-icon"><Building2 size={23} /></span>
-        <h1>Cadastre sua empresa</h1>
-        <p>Os clientes e demais registros ficarão vinculados a este espaço de trabalho.</p>
+        <h1>Ative seu espaço</h1>
+        <p>Os clientes e demais registros ficarão vinculados à EletroAgro Soluções.</p>
         <form onSubmit={createCompany} className="company-setup-form">
-          <label htmlFor="company-name">Nome da empresa</label>
-          <input id="company-name" value={companyName} onChange={(event) => setCompanyName(event.target.value)} minLength={2} maxLength={160} required placeholder="Ex.: EletroAgro Soluções" />
+          <div className="company-access-ready"><strong>EletroAgro Soluções</strong><small>Identidade definida para este espaço de trabalho.</small></div>
           {error && <p className="customers-feedback error" role="alert">{error}</p>}
           <button className="customers-primary" disabled={busy}>{busy ? 'Salvando…' : 'Criar espaço da empresa'}</button>
         </form>

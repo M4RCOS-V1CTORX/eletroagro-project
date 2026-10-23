@@ -140,7 +140,7 @@ export default function SettingsPage({ onCompanyChange, onCompanyDeleted }) {
     {error && <p className="customers-feedback error" role="alert">{error}</p>}{notice && <p className="customers-feedback success" role="status">{notice}</p>}
     <section className="settings-card"><header><span className="settings-icon"><Building2 size={19} /></span><span><strong>Dados da empresa</strong><small>{company.role === 'owner' ? 'Responsável da empresa' : 'Apenas o responsável pode editar'}</small></span></header>
       <form className="customer-form settings-form" onSubmit={saveCompany}>
-        <label className="field-wide">Nome da empresa<input required minLength="2" maxLength="160" disabled={company.role !== 'owner'} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+        <label className="field-wide">Nome da empresa<input disabled value="EletroAgro Soluções" aria-describedby="fixed-company-name" /><small id="fixed-company-name">Identidade institucional definida para o sistema.</small></label>
         <label>CPF/CNPJ<input maxLength="30" disabled={company.role !== 'owner'} value={draft.taxIdentifier} onChange={(event) => setDraft({ ...draft, taxIdentifier: event.target.value })} /></label>
         <label>Telefone<input maxLength="40" disabled={company.role !== 'owner'} value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} /></label>
         <label className="field-wide">E-mail<input type="email" maxLength="254" disabled={company.role !== 'owner'} value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} /></label>
