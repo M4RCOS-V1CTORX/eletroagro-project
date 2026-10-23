@@ -162,7 +162,14 @@ async function createQuotePdf(quote, company) {
     quote.terms && ['Condições comerciais', quote.terms],
     quote.notes && ['Observações', quote.notes],
   ].filter(Boolean);
-  termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
+  if (termsCards.length === 2) {
+    const cardGap = 5; const cardWidth = (tableWidth - cardGap) / 2;
+    const prepared = termsCards.map(([label, value]) => ({ label, lines: doc.splitTextToSize(String(value), cardWidth - 10) }));
+    const cardHeight = Math.max(...prepared.map(({ lines }) => Math.max(23, 13 + lines.length * 4.2)));
+    if (cardHeight <= 62 && y + cardHeight + 4 <= page.contentBottom) {
+      prepared.forEach(({ label, lines }, index) => { const x = page.margin + index * (cardWidth + cardGap); fill(colors.pale); doc.roundedRect(x, y, cardWidth, cardHeight, 2, 2, 'F'); fill(colors.green); doc.roundedRect(x, y, 1.2, cardHeight, .5, .5, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); setText(colors.forest); doc.text(label.toUpperCase(), x + 5, y + 7); doc.setFont('helvetica', 'normal'); doc.setFontSize(10); setText(colors.ink); doc.text(lines, x + 5, y + 13); }); y += cardHeight + 4;
+    } else termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
+  } else termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
 
   ensureSpace(39);
   stroke(colors.line); doc.setLineWidth(0.35); doc.line(page.margin, y, page.width - page.margin, y); y += 8;

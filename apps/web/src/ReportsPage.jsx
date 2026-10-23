@@ -42,7 +42,7 @@ export default function ReportsPage() {
       ensureSpace(subtitle ? 17 : 12); y = drawPdfSection(doc, y, title, subtitle, palette);
     }
     function tableHeader(left, right) {
-      y = drawPdfTableHeader(doc, y - 4, [{ label: left, x: margin + 4 }, { label: right, x: pageWidth - margin - 4, align: 'right' }], palette) - 2;
+      y = drawPdfTableHeader(doc, y, [{ label: left, x: margin + 4 }, { label: right, x: pageWidth - margin - 4, align: 'right' }], palette) + 4;
     }
     function tableRow(label, value, note = '') {
       ensureSpace(10); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...palette.ink); doc.text(String(label || '-'), margin + 4, y);
