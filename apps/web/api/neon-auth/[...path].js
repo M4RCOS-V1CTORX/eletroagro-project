@@ -20,12 +20,16 @@ function getRequestBody(request) {
 }
 
 export default async function handler(request, response) {
-  const pathParts = Array.isArray(request.query.path)
-    ? request.query.path
-    : request.query.path ? [request.query.path] : [];
-  const targetUrl = new URL(`${neonAuthBaseUrl}/${pathParts.map(encodeURIComponent).join('/')}`);
-  const queryIndex = request.url.indexOf('?');
-  if (queryIndex !== -1) targetUrl.search = request.url.slice(queryIndex);
+  const incomingUrl = new URL(request.url, 'https://local.invalid');
+  const authPathMarker = '/neon-auth/';
+  const markerIndex = incomingUrl.pathname.indexOf(authPathMarker);
+  const pathParts = markerIndex !== -1
+    ? incomingUrl.pathname.slice(markerIndex + authPathMarker.length).split('/').filter(Boolean)
+    : Array.isArray(request.query.path)
+      ? request.query.path
+      : request.query.path ? [request.query.path] : [];
+  const targetUrl = new URL(`${neonAuthBaseUrl}/${pathParts.map((part) => encodeURIComponent(decodeURIComponent(part))).join('/')}`);
+  targetUrl.search = incomingUrl.search;
 
   const requestHeaders = new Headers(request.headers);
   for (const header of hopByHopHeaders) requestHeaders.delete(header);
