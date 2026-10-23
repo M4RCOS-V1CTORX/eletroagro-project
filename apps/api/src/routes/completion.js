@@ -55,7 +55,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
           (SELECT COUNT(*)::int FROM public.quotes WHERE company_id=$1 AND archived_at IS NULL AND issued_at BETWEEN $2 AND $3) AS quotes,
           (SELECT COUNT(*)::int FROM public.quotes WHERE company_id=$1 AND archived_at IS NULL AND status='approved' AND issued_at BETWEEN $2 AND $3) AS approved_quotes,
           (SELECT COUNT(*)::int FROM public.service_orders WHERE company_id=$1 AND status='completed' AND completed_at::date BETWEEN $2 AND $3) AS completed_orders`, [companyId, from, to]),
-        pool.query(`WITH months AS (SELECT generate_series(date_trunc('month',$2::date),date_trunc('month',$3::date),'1 month')::date month)
+        pool.query(`WITH months AS (SELECT generate_series(date_trunc('month',$2::date),date_trunc('month',$3::date),'1 month')::date AS month)
           SELECT to_char(m.month,'YYYY-MM') AS month,
           COALESCE((SELECT SUM(total) FROM public.sales s WHERE s.company_id=$1 AND s.status='completed' AND date_trunc('month',s.sale_date)=m.month),0)::text AS sales,
           COALESCE((SELECT SUM(p.amount) FROM public.financial_payments p JOIN public.financial_entries f ON f.company_id=p.company_id AND f.id=p.entry_id WHERE p.company_id=$1 AND f.entry_type='income' AND date_trunc('month',p.paid_at)=m.month),0)::text AS income,
@@ -67,7 +67,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
           FROM public.catalog_items c LEFT JOIN public.stock_movements m ON m.company_id=c.company_id AND m.catalog_item_id=c.id
           WHERE c.company_id=$1 AND c.item_type='product' AND c.archived_at IS NULL AND c.is_active
           GROUP BY c.id HAVING COALESCE(SUM(CASE WHEN m.direction='in' THEN m.quantity WHEN m.direction='out' THEN -m.quantity ELSE 0 END),0)<=c.minimum_stock
-          ORDER BY stock::numeric,c.name LIMIT 20`, [companyId]),
+          ORDER BY COALESCE(SUM(CASE WHEN m.direction='in' THEN m.quantity WHEN m.direction='out' THEN -m.quantity ELSE 0 END),0),c.name LIMIT 20`, [companyId]),
         pool.query(`SELECT customer_name,COUNT(*)::int AS sales_count,SUM(total)::text AS total FROM public.sales WHERE company_id=$1 AND status='completed' AND sale_date BETWEEN $2 AND $3 GROUP BY customer_name ORDER BY SUM(total) DESC LIMIT 10`, [companyId, from, to]),
         pool.query(`SELECT COALESCE(m.display_name,m.email,l.actor_subject) AS actor,COUNT(*)::int AS actions FROM public.audit_logs l LEFT JOIN public.company_memberships m ON m.company_id=l.company_id AND m.auth_subject=l.actor_subject WHERE l.company_id=$1 AND l.created_at::date BETWEEN $2 AND $3 GROUP BY COALESCE(m.display_name,m.email,l.actor_subject) ORDER BY COUNT(*) DESC LIMIT 10`, [companyId, from, to]),
       ]);
