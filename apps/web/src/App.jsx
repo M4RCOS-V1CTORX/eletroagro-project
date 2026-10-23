@@ -28,6 +28,7 @@ const navigation = [
   { label: 'Financeiro', icon: ChartNoAxesCombined, key: 'finance' },
   { label: 'Agenda', icon: CalendarDays, key: 'agenda' },
   { label: 'Histórico', icon: Activity, key: 'audit' },
+  { label: 'Configurações', icon: Settings, key: 'settings' },
 ];
 const desktopNavigationGroups = [
   { label: 'PAINEL', keys: ['overview'] },
