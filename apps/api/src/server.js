@@ -12,6 +12,7 @@ import { createSuppliersRouter } from './routes/suppliers.js';
 import { createSalesRouter } from './routes/sales.js';
 import { createOperationsRouter } from './routes/operations.js';
 import { createCompletionRouter } from './routes/completion.js';
+import { invitationEmailConfiguration } from './services/invitation-email.js';
 
 const { Pool } = pg;
 const app = express();
@@ -57,10 +58,12 @@ app.use('/api', (request, response, next) => {
 app.use(express.json({ limit: '4mb' }));
 
 app.get('/api/health', (_request, response) => {
+  const invitationEmail = invitationEmailConfiguration();
   response.json({
     status: 'ok',
     service: 'eletroagro-api',
     database: pool ? 'configured' : 'not_configured',
+    invitationEmail: invitationEmail.configured ? 'configured' : 'not_configured',
   });
 });
 

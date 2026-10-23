@@ -61,7 +61,17 @@ export default function SettingsPage({ onCompanyChange, onCompanyDeleted }) {
     try {
       const result = await apiRequest('/api/company/invitations', { method: 'POST', body: JSON.stringify({ email: inviteEmail, permissions: invitePermissions }) });
       setInviteCode(result.code); setInviteEmail(''); setAccess(await apiRequest('/api/company/access'));
-      setNotice(result.delivery?.sent ? `Convite enviado por e-mail para ${result.invitation.invited_email}.` : `Convite criado para ${result.invitation.invited_email}. Copie o código e envie à pessoa.`);
+      const deliveryMessages = {
+        not_configured: 'O envio de e-mail ainda não está configurado na API.',
+        sender_not_verified: 'O domínio do remetente ainda não foi verificado no serviço de e-mail.',
+        provider_auth_failed: 'A chave do serviço de e-mail foi recusada.',
+        rate_limited: 'O serviço de e-mail atingiu o limite temporário de envios.',
+        provider_unavailable: 'O serviço de e-mail está temporariamente indisponível.',
+        delivery_failed: 'O serviço de e-mail recusou o envio.',
+      };
+      setNotice(result.delivery?.sent
+        ? `Convite enviado por e-mail para ${result.invitation.invited_email}.`
+        : `Convite criado para ${result.invitation.invited_email}. ${deliveryMessages[result.delivery?.reason] || 'O e-mail não pôde ser enviado.'} Copie o código abaixo e envie à pessoa.`);
     } catch (inviteError) { setError(inviteError.message); }
     finally { setBusy(false); }
   }

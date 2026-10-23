@@ -1,30 +1,13 @@
 import { Router } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { requireCompanyMembership, requireDatabase } from '../middleware/neon-auth.js';
+import { sendInvitationEmail } from '../services/invitation-email.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const permissionKeys = ['commercial', 'operations', 'finance', 'reports', 'audit'];
 const defaultPermissions = Object.fromEntries(permissionKeys.map((key) => [key, true]));
 function normalizePermissions(input) { return Object.fromEntries(permissionKeys.map((key) => [key, input?.[key] !== false])); }
 export const companyTestHelpers = { normalizePermissions, permissionKeys };
-
-async function sendInvitationEmail({ email, companyName, code }) {
-  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { sent: false, reason: 'not_configured' };
-  const appUrl = (process.env.APP_URL || process.env.WEB_ORIGIN || '').split(',')[0].trim();
-  const result = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: process.env.EMAIL_FROM,
-      to: [email],
-      subject: `Convite para acessar ${companyName}`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto"><h2>Você foi convidado para ${companyName}</h2><p>Crie ou acesse sua conta com este mesmo e-mail e informe o código abaixo:</p><p style="padding:16px;background:#f2f7f5;border-radius:8px;font-size:18px;word-break:break-all"><strong>${code}</strong></p>${appUrl ? `<p><a href="${appUrl}">Abrir EletroAgro</a></p>` : ''}<p>O código expira em 7 dias.</p></div>`,
-    }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!result.ok) throw new Error(`Falha no serviço de e-mail (${result.status}).`);
-  return { sent: true };
-}
 
 export function createCompaniesRouter({ pool, requireAuth }) {
   const router = Router();
@@ -120,8 +103,7 @@ export function createCompaniesRouter({ pool, requireAuth }) {
         VALUES($1,$2,$3,$4,$5::jsonb,now()+interval '7 days') RETURNING id,invited_email,permissions,expires_at`, [request.company.company_id,email,tokenHash,request.company.membership_id,JSON.stringify(permissions)]);
       await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,$2,'invited','company_invitation',$3,$4::jsonb)`,[request.company.company_id,request.auth.subject,invite.rows[0].id,JSON.stringify({email})]);
       await client.query('COMMIT');
-      let delivery = { sent: false, reason: 'not_configured' };
-      try { delivery = await sendInvitationEmail({ email, companyName: request.company.company_name, code }); } catch (emailError) { console.error('Falha ao enviar convite por e-mail:', emailError.message); delivery = { sent: false, reason: 'delivery_failed' }; }
+      const delivery = await sendInvitationEmail({ email, companyName: request.company.company_name, code });
       return response.status(201).json({ invitation: invite.rows[0], code, delivery });
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
