@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { Activity, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, LayoutDashboard, LogOut, Package, Settings, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Activity, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, LayoutDashboard, LogOut, Menu, Package, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
@@ -29,8 +29,20 @@ const navigation = [
   { label: 'Agenda', icon: CalendarDays, key: 'agenda' },
   { label: 'Histórico', icon: Activity, key: 'audit' },
 ];
+const desktopNavigationGroups = [
+  { label: 'PAINEL', keys: ['overview'] },
+  { label: 'COMERCIAL', keys: ['customers', 'catalog', 'suppliers', 'quotes', 'sales'] },
+  { label: 'OPERAÇÃO', keys: ['orders', 'stock', 'agenda'] },
+  { label: 'GESTÃO', keys: ['finance', 'audit'] },
+];
 
 const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', orders: 'Ordens de serviço', stock: 'Estoque', finance: 'Financeiro', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
+const mobilePrimaryKeys = ['overview', 'customers', 'quotes', 'sales'];
+const mobileMoreGroups = [
+  { label: 'Operação', keys: ['orders', 'stock', 'finance', 'agenda'] },
+  { label: 'Cadastros', keys: ['catalog', 'suppliers'] },
+  { label: 'Gestão', keys: ['audit', 'settings'] },
+];
 
 async function readAuthSessionWithRetry() {
   let latest;
@@ -68,6 +80,25 @@ export default function App() {
   const [databaseStatus, setDatabaseStatus] = useState('checking');
   const [page, setPage] = useState('overview');
   const [companyName, setCompanyName] = useState('');
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const mobileMoreTriggerRef = useRef(null);
+  const mobileMoreSheetRef = useRef(null);
+  const hadMobileMoreOpen = useRef(false);
+
+  useEffect(() => {
+    if (!mobileMoreOpen) {
+      if (hadMobileMoreOpen.current) {
+        hadMobileMoreOpen.current = false;
+        mobileMoreTriggerRef.current?.focus({ preventScroll: true });
+      }
+      return undefined;
+    }
+    hadMobileMoreOpen.current = true;
+    mobileMoreSheetRef.current?.focus({ preventScroll: true });
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setMobileMoreOpen(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileMoreOpen]);
 
   useEffect(() => {
     let active = true;
@@ -182,6 +213,7 @@ export default function App() {
     setUser(null);
     setCompanyName('');
     setPage('overview');
+    setMobileMoreOpen(false);
     setAuthError('');
     setAuthNotice('');
   }
@@ -200,14 +232,17 @@ export default function App() {
           <img className="brand-logo" src="/logo-eletroagro.jpeg" alt="EletroAgro Soluções" />
         </a>
         <div className="company-chip"><span className="company-avatar">EA</span><span><b>{companyName || 'Minha empresa'}</b><small>Ambiente local</small></span><span className="chevron">⌄</span></div>
-        <p className="nav-caption">MENU PRINCIPAL</p>
         <nav aria-label="Menu principal">
-          {navigation.map(({ label, icon: Icon, key }) => {
-            const active = page === key;
-            return <a className={`nav-link${active ? ' active' : ''}`} href={`#${key}`} key={label} aria-label={label} aria-current={active ? 'page' : undefined} title={label} onClick={(event) => { event.preventDefault(); setPage(key); }}>
-              <Icon size={18} strokeWidth={1.8} /><span>{label}</span>
-            </a>;
-          })}
+          {desktopNavigationGroups.map((group) => <div className="nav-group" key={group.label}>
+            <p className="nav-caption">{group.label}</p>
+            {group.keys.map((key) => {
+              const { label, icon: Icon } = navigation.find((item) => item.key === key);
+              const active = page === key;
+              return <a className={`nav-link${active ? ' active' : ''}`} href={`#${key}`} key={key} aria-label={label} aria-current={active ? 'page' : undefined} title={label} onClick={(event) => { event.preventDefault(); setPage(key); }}>
+                <Icon size={18} strokeWidth={1.8} /><span>{label}</span>
+              </a>;
+            })}
+          </div>)}
         </nav>
         <div className="sidebar-bottom">
           <a className={`nav-link${page === 'settings' ? ' active' : ''}`} href="#configuracoes" aria-label="Configurações" title="Configurações" onClick={(event) => { event.preventDefault(); setPage('settings'); }}><Settings size={18} /><span>Configurações</span></a>
@@ -224,17 +259,29 @@ export default function App() {
           {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={() => { setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={setPage} />}
         </Suspense>
       </main>
+      {mobileMoreOpen && <>
+        <button className="mobile-more-dismiss" type="button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)} />
+        <section id="mobile-more-menu" ref={mobileMoreSheetRef} className="mobile-more-sheet" aria-label="Mais módulos" tabIndex={-1}>
+          <header><div><span>MENU</span><h2>Acesse outras áreas</h2></div><button type="button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)}><X size={19} /></button></header>
+          {mobileMoreGroups.map((group) => <div className="mobile-more-group" key={group.label}>
+            <h3>{group.label}</h3>
+            <div>{group.keys.map((key) => {
+              const item = navigation.find((entry) => entry.key === key);
+              const Icon = item.icon;
+              return <button type="button" className={page === key ? 'active' : ''} key={key} onClick={() => { setPage(key); setMobileMoreOpen(false); }}><Icon size={19} /><span>{item.label}</span></button>;
+            })}</div>
+          </div>)}
+          <div className="mobile-more-account"><span className="user-avatar">{(user.name || user.email || 'U').slice(0, 1).toUpperCase()}</span><span><b>{user.name || 'Usuário'}</b><small>{user.email}</small></span><button type="button" onClick={handleSignOut}><LogOut size={17} /><span>Sair</span></button></div>
+        </section>
+      </>}
       <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
-        {navigation.map(({ label, icon: Icon, key }) => (
+        {navigation.filter(({ key }) => mobilePrimaryKeys.includes(key)).map(({ label, icon: Icon, key }) => (
           <button className={`mobile-nav-item${page === key ? ' active' : ''}`} type="button" key={key} aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}>
             <Icon size={20} strokeWidth={1.9} /><span>{label}</span>
           </button>
         ))}
-        <button className={`mobile-nav-item${page === 'settings' ? ' active' : ''}`} type="button" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => setPage('settings')}>
-          <Settings size={20} strokeWidth={1.9} /><span>Configurações</span>
-        </button>
-        <button className="mobile-nav-item mobile-nav-signout" type="button" onClick={handleSignOut}>
-          <LogOut size={20} strokeWidth={1.9} /><span>Sair da conta</span>
+        <button ref={mobileMoreTriggerRef} className={`mobile-nav-item${mobileMoreOpen || !mobilePrimaryKeys.includes(page) ? ' active' : ''}`} type="button" aria-expanded={mobileMoreOpen} onClick={() => setMobileMoreOpen((open) => !open)}>
+          {mobileMoreOpen ? <X size={20} strokeWidth={1.9} /> : <Menu size={20} strokeWidth={1.9} />}<span>Mais</span>
         </button>
       </nav>
     </div>
