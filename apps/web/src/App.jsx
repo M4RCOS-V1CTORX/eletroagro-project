@@ -32,6 +32,16 @@ const navigation = [
 
 const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', orders: 'Ordens de serviço', stock: 'Estoque', finance: 'Financeiro', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
 
+async function readAuthSessionWithRetry() {
+  let latest;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    latest = await authClient.getSession();
+    if (latest.error || (latest.data?.session && latest.data?.user)) return latest;
+    if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return latest;
+}
+
 async function verifyApiSession(sessionResult) {
   const token = await getAuthAccessToken(sessionResult);
   const response = await fetch(`${apiUrl}/api/session`, {
@@ -68,7 +78,7 @@ export default function App() {
         return;
       }
       try {
-        const result = await authClient.getSession();
+        const result = await readAuthSessionWithRetry();
         if (result.data?.session && result.data?.user) {
           const verifiedUser = await verifyApiSession(result);
           if (active) { setUser(verifiedUser); setCompanyName(verifiedUser.company?.name || ''); }
@@ -109,7 +119,7 @@ export default function App() {
     setAuthError('');
     setAuthNotice('');
     const form = new FormData(event.currentTarget);
-    const email = String(form.get('email') || '').trim();
+    const email = String(form.get('email') || '').trim().toLowerCase();
     const password = String(form.get('password') || '');
     const name = String(form.get('name') || '').trim();
     try {
@@ -136,16 +146,28 @@ export default function App() {
         throw new Error(authMessage || (isSignUp ? 'Não foi possível criar sua conta.' : 'Não foi possível entrar. Tente novamente.'));
       }
 
-      const sessionResult = await authClient.getSession();
+      const sessionResult = await readAuthSessionWithRetry();
+      if (sessionResult.error) {
+        throw new Error(`O serviço de autenticação não conseguiu ler a sessão (HTTP ${sessionResult.error.status || 'erro'}): ${sessionResult.error.message || 'resposta inválida do servidor'}`);
+      }
       if (!sessionResult.data?.session) {
         if (isSignUp) {
           setAuthNotice(`Conta criada${email ? ` para ${email}` : ''}. Abra o e-mail de confirmação, inclusive a pasta de spam, e confirme seu endereço. Depois, volte aqui e toque em Entrar.`);
           setIsSignUp(false);
           return;
         }
-        throw new Error('O login foi aceito, mas a sessão não abriu. Atualize a página e tente entrar novamente.');
+        throw new Error('A autenticação respondeu, mas o navegador não confirmou a sessão. Confira se os cookies estão permitidos para este site e tente novamente.');
       }
-      const verifiedUser = await verifyApiSession(sessionResult);
+      let verifiedUser;
+      try {
+        verifiedUser = await verifyApiSession(sessionResult);
+      } catch (verificationError) {
+        const detail = verificationError.message || '';
+        if (/token|jwt|sess[aã]o|session|unauthorized|401/i.test(detail)) {
+          throw new Error('Sua sessão não foi aceita pela API. Saia, entre novamente e, se continuar, envie este erro ao suporte: ' + detail);
+        }
+        throw verificationError;
+      }
       setUser(verifiedUser);
       setCompanyName(verifiedUser.company?.name || '');
     } catch (error) {
@@ -159,14 +181,13 @@ export default function App() {
     await authClient?.signOut();
     setUser(null);
     setCompanyName('');
-    setCompanyName('');
     setPage('overview');
     setAuthError('');
     setAuthNotice('');
   }
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
-  if (!user) return <AuthScreen isSignUp={isSignUp} onToggleMode={(nextMode) => { setIsSignUp(nextMode); setAuthError(''); if (nextMode) setAuthNotice(''); }} onSubmit={handleAuthSubmit} busy={authBusy} error={authError} notice={authNotice} />;
+  if (!user) return <AuthScreen isSignUp={isSignUp} onToggleMode={(nextMode) => { setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} busy={authBusy} error={authError} notice={authNotice} />;
   if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
   const apiLabel = apiStatus === 'online' ? 'API conectada' : apiStatus === 'checking' ? 'Verificando API' : 'API desconectada';
