@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Building2, Check, Copy, FileText, LoaderCircle, MailPlus, Palette, Save, ShieldAlert, ShieldCheck, Users, X } from 'lucide-react';
+import { Bell, Building2, Check, Copy, FileText, Link, LoaderCircle, MailPlus, Palette, Save, ShieldAlert, ShieldCheck, Users, X } from 'lucide-react';
 import { apiRequest } from './apiClient.js';
 
 
@@ -81,6 +81,15 @@ export default function SettingsPage({ onCompanyChange, onCompanyDeleted }) {
     catch { setError('Não foi possível copiar automaticamente. Selecione e copie o código exibido.'); }
   }
 
+  async function copyInviteLink() {
+    try {
+      const url = new URL(window.location.origin);
+      url.searchParams.set('invite', inviteCode);
+      await navigator.clipboard.writeText(url.toString());
+      setNotice('Link de convite copiado. Envie-o à pessoa convidada.');
+    } catch { setError('Não foi possível copiar o link automaticamente. Copie o código exibido.'); }
+  }
+
   async function changeMember(member) {
     setBusy(true); setError('');
     try {
@@ -138,7 +147,7 @@ export default function SettingsPage({ onCompanyChange, onCompanyDeleted }) {
         {company.role === 'owner' && <div className="customer-form-actions field-wide"><button className="customers-primary" disabled={busy}><Save size={15} /> {busy ? 'Salvando…' : 'Salvar dados da empresa'}</button></div>}
       </form>
     </section>
-    {company.role === 'owner' && <TeamAccess access={access} email={inviteEmail} setEmail={setInviteEmail} code={inviteCode} busy={busy} invitePermissions={invitePermissions} setInvitePermissions={setInvitePermissions} onInvite={inviteMember} onCopy={copyInvite} onChangeMember={changeMember} onChangePermissions={changePermissions} onRevoke={revokeInvite} />}
+    {company.role === 'owner' && <TeamAccess access={access} email={inviteEmail} setEmail={setInviteEmail} code={inviteCode} busy={busy} invitePermissions={invitePermissions} setInvitePermissions={setInvitePermissions} onInvite={inviteMember} onCopy={copyInvite} onCopyLink={copyInviteLink} onChangeMember={changeMember} onChangePermissions={changePermissions} onRevoke={revokeInvite} />}
     <section className="settings-card"><header><span className="settings-icon"><Bell size={19}/></span><span><strong>Lembretes no navegador</strong><small>Avise sobre compromissos próximos quando o sistema estiver aberto.</small></span></header><form className="settings-preferences-form" onSubmit={saveNotifications}><label className="settings-check"><input type="checkbox" checked={notificationSettings.browserNotifications} onChange={(event) => setNotificationSettings({ ...notificationSettings, browserNotifications: event.target.checked })}/><span>Ativar notificações neste aparelho</span></label><label>Avisar com antecedência<select value={notificationSettings.reminderMinutes} onChange={(event) => setNotificationSettings({ ...notificationSettings, reminderMinutes: Number(event.target.value) })}><option value="15">15 minutos</option><option value="30">30 minutos</option><option value="60">1 hora</option><option value="1440">1 dia</option><option value="10080">7 dias</option></select></label><button className="customers-primary" disabled={busy}><Save size={15}/>Salvar lembretes</button></form></section>
     {company.role === 'owner' && <section className="settings-card"><header><span className="settings-icon"><Palette size={19}/></span><span><strong>Personalização dos documentos</strong><small>Aplique a identidade da empresa em recibos e documentos novos.</small></span></header><form className="settings-preferences-form document-settings-form" onSubmit={saveDocuments}><label>Cor de destaque<input type="color" value={documentSettings.accentColor} onChange={(event) => setDocumentSettings({ ...documentSettings, accentColor: event.target.value })}/></label><label className="field-wide">Rodapé<input maxLength="300" value={documentSettings.footerText} onChange={(event) => setDocumentSettings({ ...documentSettings, footerText: event.target.value })}/></label><label className="settings-check"><input type="checkbox" checked={documentSettings.showSignature} onChange={(event) => setDocumentSettings({ ...documentSettings, showSignature: event.target.checked })}/><span>Exibir campo de assinatura</span></label><button className="customers-primary" disabled={busy}><FileText size={15}/>Salvar documentos</button></form></section>}
     {company.role === 'owner' && <section className="settings-danger-card"><header><span className="settings-danger-icon"><ShieldAlert size={19} /></span><span><strong>Excluir todos os dados da empresa</strong><small>Remove permanentemente clientes, produtos, serviços, orçamentos, históricos e o cadastro da empresa.</small></span></header>
@@ -148,11 +157,11 @@ export default function SettingsPage({ onCompanyChange, onCompanyDeleted }) {
 }
 
 const permissionLabels = { commercial: 'Comercial', operations: 'Operação', finance: 'Financeiro', reports: 'Relatórios', audit: 'Histórico' };
-function TeamAccess({ access, email, setEmail, code, busy, invitePermissions, setInvitePermissions, onInvite, onCopy, onChangeMember, onChangePermissions, onRevoke }) {
+function TeamAccess({ access, email, setEmail, code, busy, invitePermissions, setInvitePermissions, onInvite, onCopy, onCopyLink, onChangeMember, onChangePermissions, onRevoke }) {
   return <section className="settings-card team-access-card"><header><span className="settings-icon team-settings-icon"><Users size={19} /></span><span><strong>Equipe e acessos</strong><small>{access ? `${access.members.filter((m) => m.is_active).length} de 5 acessos ativos` : 'Gerencie quem pode acessar os dados da empresa.'}</small></span></header>
     <div className="team-member-list">{access?.members.map((member) => <article className="team-member-row" key={member.id}><span className="team-member-avatar">{(member.display_name||member.email||'?').slice(0,1).toUpperCase()}</span><span className="team-member-name"><b>{member.display_name || member.email || 'Membro sem identificação'}</b><small>{member.email || 'E-mail ainda não sincronizado'} · {member.role === 'owner' ? 'Responsável' : member.is_active ? 'Acesso ativo' : 'Acesso suspenso'}</small></span>{member.role === 'owner' ? <span className="team-owner-badge"><Check size={13}/>Responsável</span> : <><button className="team-access-action" disabled={busy} onClick={() => onChangeMember(member)}>{member.is_active ? 'Suspender' : 'Restaurar'}</button><div className="member-permissions"><span><ShieldCheck size={14}/>Áreas permitidas</span>{Object.entries(permissionLabels).map(([key,label])=><label key={key}><input type="checkbox" disabled={busy} checked={member.permissions?.[key] !== false} onChange={()=>onChangePermissions(member,key)}/>{label}</label>)}</div></>}</article>)}</div>
     <form className="team-invite-form" onSubmit={onInvite}><div><b>Convidar uma pessoa</b><small>O sistema tenta enviar por e-mail. O código continua disponível para compartilhamento manual.</small></div><label>E-mail da pessoa<input required type="email" maxLength="254" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@empresa.com"/></label><div className="invite-permissions"><span>Permissões iniciais</span>{Object.entries(permissionLabels).map(([key,label])=><label key={key}><input type="checkbox" checked={invitePermissions[key]} onChange={(event)=>setInvitePermissions({...invitePermissions,[key]:event.target.checked})}/>{label}</label>)}</div><button className="customers-primary" disabled={busy}><MailPlus size={15}/> Criar convite</button></form>
-    {code && <div className="team-code-card"><div><strong>Código de convite</strong><small>A pessoa deve entrar com o e-mail convidado e colar este código na tela de acesso à equipe.</small><code>{code}</code></div><button className="customers-secondary" onClick={onCopy}><Copy size={14}/> Copiar código</button></div>}
+    {code && <div className="team-code-card"><div><strong>Convite pronto para compartilhar</strong><small>Envie o link pelo WhatsApp ou compartilhe somente o código. O convite continua vinculado ao e-mail informado.</small><code>{code}</code></div><div className="team-code-actions"><button className="customers-primary" onClick={onCopyLink}><Link size={14}/> Copiar link</button><button className="customers-secondary" onClick={onCopy}><Copy size={14}/> Copiar código</button></div></div>}
     {access?.invitations?.length>0&&<div className="team-pending"><strong>Convites pendentes</strong>{access.invitations.map((invite)=><article key={invite.id}><span><b>{invite.invited_email}</b><small>Expira em {new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short'}).format(new Date(invite.expires_at))}</small></span><button disabled={busy} onClick={()=>onRevoke(invite)} aria-label={`Cancelar convite para ${invite.invited_email}`}><X size={15}/></button></article>)}</div>}
   </section>;
 }
