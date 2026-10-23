@@ -33,7 +33,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
     if (request.company.role === 'owner') return next();
     const area = request.path.startsWith('/reports') ? 'reports'
       : request.path.startsWith('/payments') || request.path.startsWith('/receipts') ? 'finance'
-        : request.path.startsWith('/service-orders') || request.path.startsWith('/notifications') ? 'operations' : null;
+        : request.path.startsWith('/service-orders') ? 'operations' : null;
     if (!area || request.company.permissions?.[area] !== false) return next();
     return response.status(403).json({ error: { code: 'AREA_FORBIDDEN', message: 'Seu acesso não permite usar esta área.' } });
   });
