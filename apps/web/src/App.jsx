@@ -116,13 +116,34 @@ export default function App() {
       const result = isSignUp
         ? await authClient.signUp.email({ name, email, password })
         : await authClient.signIn.email({ email, password });
-      if (result.error) throw new Error(result.error.message || 'Não foi possível autenticar.');
+      if (result.error) {
+        const authMessage = result.error.message || '';
+        const authCode = result.error.code || '';
+        const combinedAuthError = `${authCode} ${authMessage}`;
+        if (!isSignUp && /email.*(not verified|unverified|not confirmed)|verify.*email|confirm.*email|EMAIL_NOT_VERIFIED/i.test(combinedAuthError)) {
+          setAuthNotice('Seu e-mail ainda não foi confirmado. Abra a mensagem de confirmação que enviamos, confira também o spam e depois volte para entrar.');
+          return;
+        }
+        if (isSignUp && /already.*(exist|register)|user.*exists|EMAIL_ALREADY_EXISTS/i.test(combinedAuthError)) {
+          throw new Error('Este e-mail já tem uma conta. Toque em Entrar e use a senha que você cadastrou.');
+        }
+        if (!isSignUp && /invalid.*(email|password|credential)|incorrect.*(email|password)|INVALID_EMAIL_OR_PASSWORD/i.test(combinedAuthError)) {
+          throw new Error('E-mail ou senha não conferem. Confira os dados e tente novamente.');
+        }
+        if (/failed to fetch|network error|load failed|fetch failed/i.test(authMessage)) {
+          throw new Error('Não foi possível conectar ao serviço de acesso. Verifique sua internet e tente novamente.');
+        }
+        throw new Error(authMessage || (isSignUp ? 'Não foi possível criar sua conta.' : 'Não foi possível entrar. Tente novamente.'));
+      }
 
       const sessionResult = await authClient.getSession();
       if (!sessionResult.data?.session) {
-        setAuthNotice('Conta criada. Confirme seu e-mail, se solicitado, e entre para continuar.');
-        setIsSignUp(false);
-        return;
+        if (isSignUp) {
+          setAuthNotice(`Conta criada${email ? ` para ${email}` : ''}. Abra o e-mail de confirmação, inclusive a pasta de spam, e confirme seu endereço. Depois, volte aqui e toque em Entrar.`);
+          setIsSignUp(false);
+          return;
+        }
+        throw new Error('O login foi aceito, mas a sessão não abriu. Atualize a página e tente entrar novamente.');
       }
       const verifiedUser = await verifyApiSession(sessionResult);
       setUser(verifiedUser);
@@ -145,7 +166,7 @@ export default function App() {
   }
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
-  if (!user) return <AuthScreen isSignUp={isSignUp} setIsSignUp={setIsSignUp} onSubmit={handleAuthSubmit} busy={authBusy} error={authError} notice={authNotice} />;
+  if (!user) return <AuthScreen isSignUp={isSignUp} onToggleMode={(nextMode) => { setIsSignUp(nextMode); setAuthError(''); if (nextMode) setAuthNotice(''); }} onSubmit={handleAuthSubmit} busy={authBusy} error={authError} notice={authNotice} />;
   if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
   const apiLabel = apiStatus === 'online' ? 'API conectada' : apiStatus === 'checking' ? 'Verificando API' : 'API desconectada';
@@ -186,7 +207,7 @@ export default function App() {
   );
 }
 
-function AuthScreen({ isSignUp, setIsSignUp, onSubmit, busy, error, notice }) {
+function AuthScreen({ isSignUp, onToggleMode, onSubmit, busy, error, notice }) {
   if (!authClient) {
     return <main className="auth-shell"><section className="auth-card"><Brand /><h1>Configuração necessária</h1><p className="auth-description">Configure VITE_NEON_AUTH_URL em apps/web/.env e reinicie o Vite para ativar o acesso.</p></section></main>;
   }
@@ -194,26 +215,26 @@ function AuthScreen({ isSignUp, setIsSignUp, onSubmit, busy, error, notice }) {
     <main className="auth-shell">
       <section className="auth-card">
         <Brand />
-        <p className="auth-eyebrow">ACESSO SEGURO</p>
+        <p className="auth-eyebrow"><span className="auth-eyebrow-dot" /> ACESSO SEGURO</p>
         <h1>{isSignUp ? 'Crie sua conta' : 'Bem-vindo de volta'}</h1>
-        <p className="auth-description">{isSignUp ? 'Cadastre o primeiro acesso ao EletroAgro.' : 'Entre para acessar o sistema de gestão.'}</p>
+        <p className="auth-description">{isSignUp ? 'Organize sua operação em um só lugar. Cadastre seu acesso para começar.' : 'Entre para continuar no sistema de gestão da EletroAgro.'}</p>
         <form className="auth-form" onSubmit={onSubmit}>
           {isSignUp && <label>Nome<input name="name" type="text" autoComplete="name" minLength="2" maxLength="120" required placeholder="Seu nome" /></label>}
-          <label>E-mail<input name="email" type="email" autoComplete="email" required placeholder="voce@empresa.com" /></label>
-          <label>Senha<input name="password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} minLength="8" required placeholder="Mínimo de 8 caracteres" /></label>
+          <label>E-mail<input name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="email" required placeholder="voce@empresa.com" /></label>
+          <label>Senha<input name="password" type="password" autoCapitalize="none" autoComplete={isSignUp ? 'new-password' : 'current-password'} minLength="8" required placeholder={isSignUp ? 'Pelo menos 8 caracteres' : 'Digite sua senha'} /></label>
           {error && <p className="auth-message error" role="alert">{error}</p>}
           {notice && <p className="auth-message notice" role="status">{notice}</p>}
-          <button className="auth-submit" type="submit" disabled={busy}>{busy ? 'Aguarde…' : isSignUp ? 'Criar conta' : 'Entrar'}</button>
+          <button className="auth-submit" type="submit" disabled={busy}>{busy ? <><span className="auth-spinner" /> Aguarde…</> : isSignUp ? 'Criar minha conta' : 'Entrar na minha conta'}</button>
         </form>
-        <p className="auth-toggle">{isSignUp ? 'Já tem uma conta?' : 'Ainda não tem uma conta?'} <button type="button" onClick={() => { setIsSignUp(!isSignUp); }}> {isSignUp ? 'Entrar' : 'Criar conta'}</button></p>
-        <div className="auth-security"><ShieldCheck size={15} /> Autenticação protegida pelo Neon</div>
+        <p className="auth-toggle">{isSignUp ? 'Já tem uma conta?' : 'Ainda não tem uma conta?'} <button type="button" onClick={() => onToggleMode(!isSignUp)}>{isSignUp ? 'Entrar' : 'Criar conta'}</button></p>
+        <div className="auth-security"><ShieldCheck size={16} /><span><b>Acesso protegido</b><small>Seus dados ficam seguros com autenticação criptografada.</small></span></div>
       </section>
     </main>
   );
 }
 
 function Brand() {
-  return <a className="auth-brand" href="#inicio" aria-label="EletroAgro Soluções"><img src="/logo-eletroagro.jpeg" alt="EletroAgro Soluções" /></a>;
+  return <div className="auth-brand-wrap"><a className="auth-brand" href="#inicio" aria-label="EletroAgro Soluções"><img src="/logo-eletroagro.jpeg" alt="EletroAgro Soluções" /></a><span><b>EletroAgro</b><small>GESTÃO E OPERAÇÃO</small></span></div>;
 }
 
 function Metric({ icon: Icon, tone, label, value, note }) {
