@@ -1,5 +1,7 @@
+import {useSyncRefresh} from './useSyncRefresh.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
+import {archivePdf,savePdfToDevice} from './deviceFiles.js';
 import { apiRequest } from './apiClient.js';
 import { addContainedImage, loadPdfLogo, pdfAccent } from './pdfDesign.js';
 
@@ -191,7 +193,7 @@ async function createQuotePdf(quote, company) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(company?.document_settings?.footerText || 'ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL', page.width / 2, page.footerTop + 16, { align: 'center' });
     doc.text(`Página ${index} de ${pages}`, page.width - page.margin, page.footerTop + 16, { align: 'right' });
   }
-  return { doc, filename: `orcamento-${number}-${safeFilePart(quote.customer_name)}.pdf` };
+  const filename=`orcamento-${number}-${safeFilePart(quote.customer_name)}.pdf`;await archivePdf(doc,filename);return {doc,filename};
 }
 
 function scaledValue(raw, places) {
@@ -220,6 +222,7 @@ function formatDate(value) {
 }
 
 export default function QuotesPage() {
+  useSyncRefresh(()=>loadQuotes(pagination.offset));
   const [quotes, setQuotes] = useState([]);
   const [summary, setSummary] = useState({ draft_count: 0, sent_count: 0, sent_total: '0', approved_count: 0, approved_total: '0', expiring_count: 0, overdue_count: 0 });
   const [pagination, setPagination] = useState({ total: 0, limit: 25, offset: 0 });
@@ -400,7 +403,7 @@ export default function QuotesPage() {
     try {
       const result = await apiRequest(`/api/quotes/${quote.id}`);
       const { doc, filename } = await createQuotePdf(result.quote, companyInfo);
-      doc.save(filename); setNotice(`PDF do orçamento nº ${String(quote.quote_number).padStart(4, '0')} baixado.`);
+      await savePdfToDevice(doc,filename); setNotice(`PDF do orçamento nº ${String(quote.quote_number).padStart(4, '0')} baixado.`);
     } catch (pdfError) { setError(pdfError.message || 'Não foi possível gerar o PDF.'); }
     finally { setBusy(false); }
   }

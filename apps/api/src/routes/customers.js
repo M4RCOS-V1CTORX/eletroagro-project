@@ -22,6 +22,11 @@ function normalizeCustomerInput(input, { partial = false } = {}) {
     return { error: 'Envie os dados do cliente em formato válido.' };
   }
   const output = {};
+  if (Object.hasOwn(input,'paymentTermDays')) {
+    const days=input.paymentTermDays === '' || input.paymentTermDays == null ? null : Number(input.paymentTermDays);
+    if (days!==null && (!Number.isInteger(days)||days<0||days>3650)) return {error:'O prazo de pagamento deve ser de 0 a 3650 dias.'};
+    output.payment_term_days=days;
+  }
   for (const [key, rule] of Object.entries(fields)) {
     if (!Object.hasOwn(input, key)) continue;
     const raw = input[key];
@@ -69,7 +74,7 @@ export function createCustomersRouter({ pool, requireAuth, requireDatabase }) {
       const result = await pool.query(
         `SELECT id, name, customer_type, tax_identifier, phone, email, postal_code,
                 street, street_number, address_complement, neighborhood, city, state,
-                notes, created_at, updated_at, archived_at, count(*) OVER()::int AS total_count
+                payment_term_days, notes, created_at, updated_at, archived_at, count(*) OVER()::int AS total_count
          FROM public.customers
          WHERE company_id = $1
            AND ($5 = 'all' OR ($5 = 'active' AND archived_at IS NULL) OR ($5 = 'archived' AND archived_at IS NOT NULL))
@@ -113,7 +118,7 @@ export function createCustomersRouter({ pool, requireAuth, requireDatabase }) {
       const result = await pool.query(
         `SELECT id, name, customer_type, tax_identifier, phone, email, postal_code,
                 street, street_number, address_complement, neighborhood, city, state,
-                notes, created_at, updated_at, archived_at
+                payment_term_days, notes, created_at, updated_at, archived_at
          FROM public.customers
          WHERE id = $1 AND company_id = $2`,
         [request.params.id, request.company.company_id],

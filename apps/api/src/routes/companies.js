@@ -214,6 +214,8 @@ export function createCompaniesRouter({ pool, requireAuth }) {
       await client.query('DELETE FROM public.quote_status_history WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.quote_items WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.quotes WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.sale_year_counters WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.transport_profiles WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.document_counters WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.customers WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.catalog_items WHERE company_id = $1', [companyId]);

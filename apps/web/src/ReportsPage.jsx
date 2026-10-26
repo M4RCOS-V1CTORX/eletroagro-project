@@ -1,13 +1,16 @@
+import {localToday} from './commercial.js';
+import {csvRows} from './csv.js';
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarRange, Download, FileDown, LoaderCircle, TrendingUp } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import {savePdfToDevice} from './deviceFiles.js';
 import { apiRequest } from './apiClient.js';
 import { createPdfPalette, drawPdfFooters, drawPdfHeader, drawPdfSection, drawPdfTableHeader, loadPdfLogo, PDF_PAGE } from './pdfDesign.js';
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const statusLabels = { draft: 'Rascunho', sent: 'Enviado', approved: 'Aprovado', rejected: 'Recusado', expired: 'Expirado', cancelled: 'Cancelado', open: 'Aberta', scheduled: 'Agendada', in_progress: 'Em andamento', waiting_material: 'Aguardando material', completed: 'Concluída' };
-const today = () => new Date().toISOString().slice(0, 10);
-const initialFrom = () => { const date = new Date(); date.setMonth(date.getMonth() - 5, 1); return date.toISOString().slice(0, 10); };
+const today = localToday;
+const initialFrom = () => { const date = new Date(); date.setMonth(date.getMonth() - 5, 1); return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-01`; };
 
 export default function ReportsPage() {
   const [range, setRange] = useState({ from: initialFrom(), to: today() });
@@ -15,6 +18,7 @@ export default function ReportsPage() {
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pdfBusy,setPdfBusy]=useState(false);
 
   async function load() {
     setLoading(true); setError('');
@@ -29,10 +33,11 @@ export default function ReportsPage() {
 
   function exportCsv() {
     const rows = [['Mês', 'Vendas', 'Receitas', 'Despesas'], ...(data?.monthly || []).map((row) => [row.month, row.sales, row.income, row.expense])];
-    const blob = new Blob([`\ufeff${rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(';')).join('\n')}`], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([csvRows(rows)], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `relatorio-${range.from}-${range.to}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }
   async function exportPdf() {
+    if(pdfBusy)return;setPdfBusy(true);setError('');try{
     const doc = new jsPDF({ unit: 'mm', format: 'a4' }); const palette = createPdfPalette(company); const logo = await loadPdfLogo();
     const pageWidth = PDF_PAGE.width; const pageHeight = PDF_PAGE.height; const margin = PDF_PAGE.margin;
     const period = `${range.from.split('-').reverse().join('/')} a ${range.to.split('-').reverse().join('/')}`;
@@ -44,10 +49,11 @@ export default function ReportsPage() {
     function tableHeader(left, right) {
       y = drawPdfTableHeader(doc, y, [{ label: left, x: margin + 4 }, { label: right, x: pageWidth - margin - 4, align: 'right' }], palette) + 4;
     }
-    function tableRow(label, value, note = '') {
-      ensureSpace(10); doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...palette.ink); doc.text(String(label || '-'), margin + 4, y);
-      if (note) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...palette.muted); doc.text(String(note), margin + 4, y + 4.5); }
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...palette.navy); doc.text(String(value ?? '-'), pageWidth - margin - 4, y, { align: 'right' }); doc.setDrawColor(...palette.line); doc.line(margin + 4, y + 6, pageWidth - margin - 4, y + 6); y += note ? 12 : 9;
+    function tableRow(label,value,note='') {
+      doc.setFont('helvetica','bold');doc.setFontSize(9.5);const left=doc.splitTextToSize(String(label||'-'),82),right=doc.splitTextToSize(String(value??'-'),76);doc.setFontSize(8);const notes=note?doc.splitTextToSize(String(note),82):[];const height=Math.max(left.length*4.5+notes.length*3.5,right.length*4.5)+7;ensureSpace(height);
+      doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(...palette.ink);doc.text(left,margin+4,y);doc.setTextColor(...palette.navy);doc.text(right,pageWidth-margin-4,y,{align:'right'});
+      if(notes.length){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...palette.muted);doc.text(notes,margin+4,y+left.length*4.5);}
+      doc.setDrawColor(...palette.line);doc.line(margin+4,y+height-4,pageWidth-margin-4,y+height-4);y+=height;
     }
     drawPdfHeader(doc, { company, title: 'Relatório gerencial', subtitle: `Período: ${period}`, palette, logo });
     const metrics = [['Vendas', brl.format(Number(data.summary.sales))], ['Receitas', brl.format(Number(data.summary.income))], ['Despesas', brl.format(Number(data.summary.expense))], ['Resultado', brl.format(result)], ['Aprovação de orçamentos', `${approvalRate.toFixed(1)}%`], ['Serviços concluídos', String(data.summary.completed_orders)]];
@@ -64,19 +70,20 @@ export default function ReportsPage() {
     y += 4; section('Atividade da equipe'); tableHeader('Usuário', 'Ações');
     if (data.activity?.length) data.activity.forEach((row) => tableRow(row.actor, row.actions)); else tableRow('Sem atividade no período', '-');
     drawPdfFooters(doc, { company, palette, text: 'Indicadores gerenciais - uso interno' });
-    doc.save(`relatorio-${range.from}-${range.to}.pdf`);
+    await savePdfToDevice(doc,`relatorio-${range.from}-${range.to}.pdf`);
+    }catch(error){setError(error.message);}finally{setPdfBusy(false);}
   }
 
   return <section className="workspace-page reports-page">
-    <header className="workspace-heading workspace-heading-green"><div><span className="workspace-eyebrow">INTELIGÊNCIA DO NEGÓCIO</span><h1>Relatórios e indicadores</h1><p>Analise vendas, resultado financeiro, serviços, estoque e atividade da equipe.</p></div><div className="workspace-heading-actions"><button className="workspace-button subtle" disabled={!data} onClick={exportCsv}><Download size={16}/> CSV</button><button className="workspace-button primary" disabled={!data} onClick={exportPdf}><FileDown size={16}/> PDF</button></div></header>
+    <header className="workspace-heading workspace-heading-green"><div><span className="workspace-eyebrow">INTELIGÊNCIA DO NEGÓCIO</span><h1>Relatórios e indicadores</h1><p>Analise vendas, resultado financeiro, serviços, estoque e atividade da equipe.</p></div><div className="workspace-heading-actions"><button className="workspace-button subtle" disabled={!data} onClick={exportCsv}><Download size={16}/> CSV</button><button className="workspace-button primary" disabled={!data||pdfBusy} onClick={exportPdf}><FileDown size={16}/> PDF</button></div></header>
     <div className="reports-filter"><CalendarRange size={18}/><label>De<input type="date" value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })}/></label><label>Até<input type="date" value={range.to} min={range.from} max={today()} onChange={(event) => setRange({ ...range, to: event.target.value })}/></label><button className="workspace-button primary" onClick={load} disabled={loading}>{loading ? 'Atualizando…' : 'Aplicar período'}</button></div>
-    {error && <div className="workspace-message is-error">{error}<button onClick={load}>Tentar novamente</button></div>}
+    {error && <div className="workspace-message is-error" role="alert">{error}<button onClick={load}>Tentar novamente</button></div>}
     {loading && !data ? <div className="reports-loading"><LoaderCircle className="spin"/>Gerando indicadores…</div> : data && <>
       <div className="reports-metrics">{[
         ['Vendas', brl.format(Number(data.summary.sales)), 'blue'], ['Receitas', brl.format(Number(data.summary.income)), 'green'], ['Despesas', brl.format(Number(data.summary.expense)), 'yellow'], ['Resultado', brl.format(result), result >= 0 ? 'green' : 'red'], ['Aprovação', `${approvalRate.toFixed(1)}%`, 'blue'], ['Serviços concluídos', data.summary.completed_orders, 'green'],
       ].map(([label, value, tone]) => <article className={`report-metric tone-${tone}`} key={label}><span>{label}</span><strong>{value}</strong></article>)}</div>
       <div className="reports-grid">
-        <article className="report-panel report-wide"><header><div><BarChart3 size={19}/><span><strong>Evolução mensal</strong><small>Vendas, entradas e saídas do período</small></span></div><TrendingUp size={18}/></header><div className="monthly-chart">{data.monthly.map((row) => <div className="month-column" key={row.month}><div className="month-bars"><i className="sales" style={{ height: `${Math.max(3, Number(row.sales) / maxMonthly * 100)}%` }} title={`Vendas ${brl.format(Number(row.sales))}`}/><i className="income" style={{ height: `${Math.max(3, Number(row.income) / maxMonthly * 100)}%` }} title={`Receitas ${brl.format(Number(row.income))}`}/><i className="expense" style={{ height: `${Math.max(3, Number(row.expense) / maxMonthly * 100)}%` }} title={`Despesas ${brl.format(Number(row.expense))}`}/></div><span>{row.month.slice(5)}/{row.month.slice(2,4)}</span></div>)}</div><div className="chart-legend"><span><i className="sales"/>Vendas</span><span><i className="income"/>Receitas</span><span><i className="expense"/>Despesas</span></div></article>
+        <article className="report-panel report-wide"><header><div><BarChart3 size={19}/><span><strong>Evolução mensal</strong><small>Vendas, entradas e saídas do período</small></span></div><TrendingUp size={18}/></header><div className="monthly-chart">{data.monthly.map((row) => <div className="month-column" key={row.month} role="img" aria-label={`${row.month}: vendas ${brl.format(Number(row.sales))}, receitas ${brl.format(Number(row.income))}, despesas ${brl.format(Number(row.expense))}`}><div className="month-bars"><i className="sales" style={{ height: `${(Number(row.sales)>0?Math.max(3, Number(row.sales) / maxMonthly * 100):0)}%` }} title={`Vendas ${brl.format(Number(row.sales))}`}/><i className="income" style={{ height: `${(Number(row.income)>0?Math.max(3, Number(row.income) / maxMonthly * 100):0)}%` }} title={`Receitas ${brl.format(Number(row.income))}`}/><i className="expense" style={{ height: `${(Number(row.expense)>0?Math.max(3, Number(row.expense) / maxMonthly * 100):0)}%` }} title={`Despesas ${brl.format(Number(row.expense))}`}/></div><span>{row.month.slice(5)}/{row.month.slice(2,4)}</span></div>)}</div><div className="chart-legend"><span><i className="sales"/>Vendas</span><span><i className="income"/>Receitas</span><span><i className="expense"/>Despesas</span></div></article>
         <StatusPanel title="Orçamentos por situação" rows={data.quoteStatuses} totalKey="total"/>
         <StatusPanel title="Serviços por situação" rows={data.orderStatuses}/>
         <ListPanel title="Principais clientes" rows={data.topCustomers.map((row) => ({ label: row.customer_name, value: brl.format(Number(row.total)), note: `${row.sales_count} venda(s)` }))}/>

@@ -1,5 +1,6 @@
+import { validateAttachment } from '../lib/attachments.js';
 import { Router } from 'express';
-import { requireCompanyMembership } from '../middleware/neon-auth.js';
+import { idempotencyGuard, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -28,7 +29,7 @@ async function audit(db, request, action, entityType, entityId, summary = {}) {
 
 export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
   const router = Router();
-  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool));
+  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool),idempotencyGuard(pool));
   router.use((request, response, next) => {
     if (request.company.role === 'owner') return next();
     const area = request.path.startsWith('/reports') ? 'reports'
@@ -138,7 +139,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
   router.post('/service-orders/:id/attachments', async (request, response) => {
     const body = request.body || {};
     const byteSize = Number(body.byteSize);
-    if (!uuidPattern.test(request.params.id) || !allowedMimeTypes.has(body.mimeType) || !Number.isInteger(byteSize) || byteSize < 1 || byteSize > 2097152 || typeof body.contentData !== 'string' || body.contentData.length > 3000000) {
+    if (!uuidPattern.test(request.params.id) || !validateAttachment(body)) {
       return response.status(400).json({ error: { code: 'INVALID_ATTACHMENT', message: 'Envie JPG, PNG, WebP ou PDF de até 2 MB.' } });
     }
     try {
@@ -164,7 +165,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
     try {
       const [preferences, reminders] = await Promise.all([
         pool.query(`SELECT browser_notifications,reminder_minutes FROM public.notification_preferences WHERE company_id=$1 AND membership_id=$2`, [request.company.company_id, request.company.membership_id]),
-        pool.query(`SELECT id,title,starts_at,address FROM public.appointments WHERE company_id=$1 AND status='scheduled' AND starts_at BETWEEN now() AND now()+interval '7 days' ORDER BY starts_at LIMIT 50`, [request.company.company_id]),
+        (request.company.role==='owner'||request.company.permissions?.operations!==false)?pool.query(`SELECT id,title,starts_at,address FROM public.appointments WHERE company_id=$1 AND status='scheduled' AND starts_at BETWEEN now() AND now()+interval '7 days' ORDER BY starts_at LIMIT 50`, [request.company.company_id]):Promise.resolve({rows:[]}),
       ]);
       return response.json({ preferences: preferences.rows[0] || { browser_notifications: false, reminder_minutes: 60 }, reminders: reminders.rows });
     } catch (error) { return fail(response, error, 'Não foi possível carregar os lembretes.'); }
@@ -190,7 +191,10 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
   router.put('/document-settings', async (request, response) => {
     if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável pode personalizar documentos.' } });
     const accentColor = /^#[0-9a-f]{6}$/i.test(request.body?.accentColor || '') ? request.body.accentColor : defaultDocumentSettings.accentColor;
-    const settings = { accentColor, footerText: String(request.body?.footerText || '').trim().slice(0, 300), showSignature: request.body?.showSignature !== false };
+    for(const [key,max] of Object.entries({pixKey:140,bankDetails:500,paymentInstructions:500})) {
+      if(request.body?.[key]!=null && (typeof request.body[key]!=='string'||request.body[key].length>max))return response.status(400).json({error:{message:'Confira os dados de pagamento e seus limites de tamanho.'}});
+    }
+    const settings = { pixKey:String(request.body?.pixKey||'').trim(),bankDetails:String(request.body?.bankDetails||'').trim(),paymentInstructions:String(request.body?.paymentInstructions||'').trim(),accentColor, footerText: String(request.body?.footerText || '').trim().slice(0, 300), showSignature: request.body?.showSignature !== false };
     try {
       await pool.query('UPDATE public.companies SET document_settings=$2::jsonb,updated_at=now() WHERE id=$1', [request.company.company_id, JSON.stringify(settings)]);
       await audit(pool, request, 'document_settings_updated', 'company', request.company.company_id, settings);

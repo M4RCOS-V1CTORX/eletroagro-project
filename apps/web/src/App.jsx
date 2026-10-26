@@ -1,8 +1,11 @@
+import ModuleBoundary from './ModuleBoundary.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Package, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
-import { apiRequest, flushOfflineQueue, offlineQueueCount } from './apiClient.js';
+import OfflineTools from './OfflineTools.jsx';
+import { apiRequest,setApiContext,offlineSession,rememberOfflineSession,forgetOfflineSession,offlineLogoutPending,clearOfflineLogout,prepareOfflineState, flushOfflineQueue, offlineQueueCount } from './apiClient.js';
+import { useDialogAccessibility } from './useDialogAccessibility.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
 const CatalogPage = lazy(() => import('./CatalogPage.jsx'));
 const QuotesPage = lazy(() => import('./QuotesPage.jsx'));
@@ -72,10 +75,12 @@ async function verifyApiSession(sessionResult) {
   });
   const companyBody = await companyResponse.json().catch(() => ({}));
   if (!companyResponse.ok && companyResponse.status !== 503) throw new Error(companyBody.error?.message || 'Não foi possível consultar o espaço da empresa.');
+  setApiContext({...body.user,companyId:companyBody.company?.id});
   return { ...body.user, company: companyBody.company || null, databaseUnavailable: companyResponse.status === 503 };
 }
 
 export default function App() {
+  useDialogAccessibility();
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
@@ -92,6 +97,13 @@ export default function App() {
   const [pendingSync, setPendingSync] = useState(0);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [reminderCount, setReminderCount] = useState(0);
+  useEffect(()=>{
+    setApiContext(user?.company?{issuer:user.issuer,subject:user.subject,companyId:user.company.id}:null);
+    if(!user?.company)return;
+    rememberOfflineSession(user).catch(error=>setAuthError(error.message));
+    offlineQueueCount().then(setPendingSync).catch(()=>{});
+    if(navigator.onLine)flushOfflineQueue().then(result=>{setPendingSync(result.remaining);if(!result.remaining)return prepareOfflineState();}).catch(error=>window.dispatchEvent(new CustomEvent('eletroagro:offline-status',{detail:{error:error.message}})));
+  },[user?.issuer,user?.subject,user?.company?.id]);
   const mobileMoreTriggerRef = useRef(null);
   const mobileMoreSheetRef = useRef(null);
   const hadMobileMoreOpen = useRef(false);
@@ -140,12 +152,17 @@ export default function App() {
   useEffect(() => {
     let active = true;
     async function restoreSession() {
+      if(!navigator.onLine){
+        try{const saved=await offlineSession();if(saved){setApiContext({issuer:saved.issuer,subject:saved.subject,companyId:saved.company.id});if(active){setUser(saved);setCompanyName(saved.company.name);setAuthLoading(false);}return;}}
+        catch(error){if(active)setAuthError(error.message);}
+      }
       if (!authClient) {
         setAuthError('Configure VITE_NEON_AUTH_URL em apps/web/.env para ativar o acesso.');
         setAuthLoading(false);
         return;
       }
       try {
+        if(await offlineLogoutPending()){const result=await authClient.signOut();if(result?.error)throw new Error('Não foi possível concluir a saída anterior. Tente novamente com conexão.');await clearOfflineLogout();}
         const result = await readAuthSessionWithRetry();
         if (result.data?.session && result.data?.user) {
           const verifiedUser = await verifyApiSession(result);
@@ -270,7 +287,8 @@ export default function App() {
   }
 
   async function handleSignOut() {
-    await authClient?.signOut();
+    await forgetOfflineSession();setApiContext(null);
+    if(navigator.onLine)await authClient?.signOut().catch(()=>{});
     setUser(null);
     setCompanyName('');
     setPage('overview');
@@ -319,13 +337,14 @@ export default function App() {
           <div className="breadcrumbs">Início <span>/</span> <b>{pageLabels[page] || 'Visão geral'}</b></div>
           <div className="topbar-tools">{installPrompt && <button className="topbar-install" onClick={installApplication}><Download size={15}/>Instalar</button>}{reminderCount > 0 && <button className="topbar-reminders" onClick={() => setPage('agenda')} title="Compromissos próximos"><Bell size={15}/><b>{reminderCount}</b></button>}<div className={`connection ${online && apiStatus === 'online' ? 'connected' : ''}`}><ApiIcon size={15} />{!online ? 'Sem conexão' : pendingSync ? `${pendingSync} pendente(s)` : apiLabel}<i /></div></div>
         </header>
-        <Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
-          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={() => { setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={setPage} />}
-        </Suspense>
+        <OfflineTools/>
+        <ModuleBoundary page={page}><Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
+          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
+        </Suspense></ModuleBoundary>
       </main>
       {mobileMoreOpen && <>
         <button className="mobile-more-dismiss" type="button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)} />
-        <section id="mobile-more-menu" ref={mobileMoreSheetRef} className="mobile-more-sheet" aria-label="Mais módulos" tabIndex={-1}>
+        <section role="dialog" aria-modal="true" id="mobile-more-menu" ref={mobileMoreSheetRef} className="mobile-more-sheet" aria-label="Mais módulos" tabIndex={-1}>
           <header><div><span>MENU</span><h2>Acesse outras áreas</h2></div><button type="button" aria-label="Fechar menu" onClick={() => setMobileMoreOpen(false)}><X size={19} /></button></header>
           {mobileMoreGroups.map((group) => <div className="mobile-more-group" key={group.label}>
             <h3>{group.label}</h3>

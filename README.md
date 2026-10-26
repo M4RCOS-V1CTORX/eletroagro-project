@@ -54,6 +54,7 @@ Depois de configurar uma URL PostgreSQL de desenvolvimento, aplique as migraçõ
 ## Estado e limites conhecidos
 
 - O painel inicial consulta vendas, recebimentos, despesas, orçamentos, agenda e pendências reais da API.
+- A visão geral apresenta períodos selecionáveis, indicadores clicáveis, comparação de entradas e saídas, saldos pendentes e prioridades por módulo, com layout para computador e celular. Os testes comerciais isolados podem ser executados com `npm run test:commercial-db`, sem acessar o banco remoto.
 - A API já inclui operações de listar, pesquisar, consultar, cadastrar, editar, restaurar e excluir permanentemente clientes e itens do catálogo. Orçamentos podem ser editados com histórico de versões e excluídos permanentemente. Exclusões de clientes e itens preservam os snapshots que já estão nos orçamentos.
 - Em Configurações, o responsável pode editar os dados da empresa ou apagar permanentemente a empresa e todos os dados de negócio vinculados após confirmação pelo nome exato.
 - As migrações preparam empresas, vínculos de usuários, clientes e catálogo. O catálogo permite cadastrar, pesquisar, editar, ativar/desativar e arquivar produtos e serviços.

@@ -8,6 +8,39 @@
   font-weight:400
 }
 * { box-sizing: border-box; }
+/* Commercial additions share the existing blue/green identity and form patterns. */
+.sale-extra-fields { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:6px 0;padding:18px;border:1px solid #dce6ed;border-radius:12px;background:#f8fbfd;min-width:0; }
+.sale-extra-fields legend { padding:0 8px;color:#174864;font-size:14px;font-weight:700; }
+.sale-extra-fields label,.sales-toolbar>label,.purchase-history label { display:grid;gap:7px;min-width:0;color:#456074;font-size:13px; }
+.sale-extra-fields input,.sale-extra-fields select,.sales-toolbar>label>select,.purchase-history select { width:100%;min-height:42px;padding:9px 11px;border:1px solid #cbdbe5;border-radius:8px;background:#fff;color:#1b2e49;font:inherit; }
+.sale-extra-fields small { font-size:12px;line-height:1.5;color:#526b7c; }
+.sale-extra-fields .field-wide { grid-column:1/-1; }
+.sale-inline-actions { display:flex;align-items:center;flex-wrap:wrap;gap:10px; }
+.sales-items-heading { flex-wrap:wrap; }
+.sale-statement-summary { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0;padding:16px;background:#f3f8fb;border:1px solid #dce6ed;border-radius:10px; }
+.sale-statement-summary div { min-width:0; }
+.sale-statement-summary dt { color:#526b7c;font-size:12px;line-height:1.5; }
+.sale-statement-summary dd { margin:4px 0 0;color:#173f60;font-weight:650;font-size:15px;overflow-wrap:anywhere; }
+.modal-backdrop.statement-backdrop { z-index:50; }
+.modal-backdrop.preview-backdrop { z-index:60; }
+.modal-backdrop.sales-payment-backdrop { z-index:50; }
+.sale-pdf-preview { width:min(96vw,1000px);height:90dvh;display:flex;flex-direction:column;gap:12px; }
+.sale-pdf-preview iframe { width:100%;flex:1;min-height:150px;border:1px solid #dce6ed;border-radius:8px; }
+.sale-pdf-preview a { text-decoration:none; }
+.purchase-history { margin:24px 0;padding:20px;background:#fff;border:1px solid #dce6ed;border-radius:12px; }
+.purchase-history h2 { margin:0 auto 0 0;font-size:18px;color:#174864; }
+.purchase-history>p { font-size:13px;color:#526b7c; }
+.finance-toolbar>label>select { min-height:38px;padding:7px;border:1px solid #cbdbe5;border-radius:8px;background:#fff;color:#174864;font:inherit; }
+[role="dialog"]:focus { outline:none; }
+@media(max-width:650px) {
+  .sale-extra-fields { grid-template-columns:minmax(0,1fr);padding:14px;gap:14px; }
+  .sale-extra-fields input,.sale-extra-fields select { font-size:16px;min-height:46px; }
+  .sale-statement-summary { padding:12px;gap:14px; }
+  .sale-statement-summary dd { font-size:14px; }
+  .sale-inline-actions>* { flex:1; }
+  .sale-pdf-preview { width:100%;height:94dvh;padding:12px; }
+  .purchase-history { padding:14px; }
+}
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 
 .app-shell {
@@ -1882,3 +1915,22 @@ body, body * { font-family:var(--font-sans)!important; }
 }
 .workspace-heading-actions { display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0; }
 @media(max-width:760px) { .workspace-heading { align-items:flex-start;flex-direction:column; } }
+
+/* Readable shared forms without changing page layout or brand colors. */
+.customer-modal .customer-form label,.workspace-modal form label { font-size:13px;line-height:1.45;color:#425e73; }
+.customer-modal .customer-form input,.customer-modal .customer-form select,.customer-modal .customer-form textarea,
+.workspace-modal form input,.workspace-modal form select,.workspace-modal form textarea { font-family:var(--font-sans);font-size:14px;min-height:42px; }
+.customer-modal .customer-form small,.workspace-modal form small { font-size:12px;line-height:1.5; }
+.customer-modal .customers-secondary,.customer-modal .customers-primary { font-size:13px;min-height:40px; }
+.statement-backdrop .customers-pagination button { min-height:42px;padding:8px 12px;border:1px solid #dce6ed;border-radius:8px;background:#fff;color:#174864;font:inherit;cursor:pointer; }
+.statement-backdrop .customers-pagination button:disabled { cursor:default;opacity:.5; }
+@media(max-width:650px) {
+  .customer-modal .customer-form input,.customer-modal .customer-form select,.customer-modal .customer-form textarea,
+  .workspace-modal form input,.workspace-modal form select,.workspace-modal form textarea { font-size:16px;min-height:46px; }
+  .statement-backdrop .statement-table { min-width:0;width:100%; }
+  .statement-backdrop .statement-table thead { display:none; }
+  .statement-backdrop .statement-table tr { display:block;padding:10px;border-bottom:1px solid #dce6ed; }
+  .statement-backdrop .statement-table td { display:flex;justify-content:space-between;gap:12px;height:auto;min-height:36px;padding:8px;border:0;font-size:13px; }
+  .statement-backdrop .statement-table td::before { content:attr(data-label);color:#526b7c; }
+  .statement-backdrop .customers-pagination { gap:10px;flex-wrap:wrap; }
+}

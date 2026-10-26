@@ -1,3 +1,4 @@
+import {useSyncRefresh} from './useSyncRefresh.js';
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, Boxes, CirclePlus, Clock3, LoaderCircle, Package, Pencil, Search, Wrench, X } from 'lucide-react';
 import { apiRequest } from './apiClient.js';
@@ -8,6 +9,7 @@ const emptyItem = { itemType: 'product', code: '', name: '', description: '', ca
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function CatalogPage() {
+  useSyncRefresh(()=>loadItems());
   const [type, setType] = useState('product');
   const [status, setStatus] = useState('active');
   const [query, setQuery] = useState('');
@@ -63,10 +65,10 @@ export default function CatalogPage() {
       estimatedMinutes: draft.itemType === 'service' && draft.estimatedMinutes ? Number(draft.estimatedMinutes) : null,
     };
     try {
-      await apiRequest(editing ? `/api/catalog/${editing.id}` : '/api/catalog', {
+      const result=await apiRequest(editing ? `/api/catalog/${editing.id}` : '/api/catalog', {
         method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload),
       });
-      setDraft(null); setEditing(null); setNotice(editing ? 'Item atualizado.' : 'Item cadastrado.');
+      setDraft(null); setEditing(null); setNotice(result.queued?result.message:editing ? 'Item atualizado.' : 'Item cadastrado.');
       await loadItems();
     } catch (saveError) {
       setError(saveError.message);

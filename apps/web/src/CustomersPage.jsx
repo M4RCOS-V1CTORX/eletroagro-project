@@ -1,11 +1,13 @@
+import {useSyncRefresh} from './useSyncRefresh.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, ArrowDownUp, Building2, ChevronLeft, ChevronRight, CirclePlus, Eye, LoaderCircle, Pencil, Search, UserRound, Users, X } from 'lucide-react';
+import { CustomerStatement } from './SaleExtras.jsx';
 import { apiRequest } from './apiClient.js';
 
 const emptyCustomer = {
   name: '', customerType: 'individual', taxIdentifier: '', phone: '', email: '',
   postalCode: '', street: '', streetNumber: '', addressComplement: '',
-  neighborhood: '', city: '', state: '', notes: '',
+  neighborhood: '', city: '', state: '', notes: '', paymentTermDays:'',
 };
 
 const formFields = [
@@ -21,6 +23,7 @@ const formFields = [
   { name: 'neighborhood', label: 'Bairro' },
   { name: 'city', label: 'Cidade' },
   { name: 'state', label: 'Estado', maxLength: 2, placeholder: 'UF' },
+  { name: 'paymentTermDays', label:'Prazo padrão de pagamento (dias)', type:'number', placeholder:'Opcional', min:0, max:3650 },
   { name: 'notes', label: 'Observações', type: 'textarea', wide: true, maxLength: 5000 },
 ];
 
@@ -34,6 +37,8 @@ function customerTypeLabel(value) {
 }
 
 export default function CustomersPage({ onCompanyChange }) {
+  useSyncRefresh(()=>loadCustomers(pagination.offset));
+  const [statementCustomer,setStatementCustomer]=useState(null);
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(true);
   const [customers, setCustomers] = useState([]);
@@ -115,7 +120,7 @@ export default function CustomersPage({ onCompanyChange }) {
       });
       setSelectedCustomer(null);
       setCustomerDraft(null);
-      setNotice(editing ? 'Cadastro atualizado.' : 'Cliente cadastrado.');
+      setNotice(result.queued?result.message:editing ? 'Cadastro atualizado.' : 'Cliente cadastrado.');
       await loadCustomers(pagination.offset);
     } catch (saveError) {
       setError(saveError.message);
@@ -207,7 +212,7 @@ export default function CustomersPage({ onCompanyChange }) {
               <td><span>{customer.phone || '—'}</span><small>{customer.email || ''}</small></td>
               <td>{[customer.city, customer.state].filter(Boolean).join(' / ') || <span className="table-muted">—</span>}</td>
               <td>{displayDate(customer.created_at)}</td>
-              <td><div className="customer-actions"><button aria-label={`Ver ${customer.name}`} title="Ver detalhes" onClick={() => setDetailsCustomer(customer)}><Eye size={16} /></button><button aria-label={`Editar ${customer.name}`} title="Editar" onClick={() => { setError(''); setCustomerDraft({ ...emptyCustomer, ...customer, customerType: customer.customer_type || 'individual', taxIdentifier: customer.tax_identifier || '', postalCode: customer.postal_code || '', streetNumber: customer.street_number || '', addressComplement: customer.address_complement || '' }); setSelectedCustomer(customer); }}><Pencil size={16} /></button>{company.role === 'owner' && customer.archived_at && <button aria-label={`Restaurar ${customer.name}`} title="Restaurar" onClick={() => restoreCustomer(customer)}><Archive size={16} /></button>}{company.role === 'owner' && <button aria-label={`Excluir permanentemente ${customer.name}`} title="Excluir permanentemente" onClick={() => archiveCustomer(customer)}><X size={16} /></button>}</div></td>
+              <td><div className="customer-actions"><button title="Extrato financeiro" aria-label={`Extrato de ${customer.name}`} onClick={()=>setStatementCustomer(customer.id)}><span aria-hidden="true">R$</span></button><button aria-label={`Ver ${customer.name}`} title="Ver detalhes" onClick={() => setDetailsCustomer(customer)}><Eye size={16} /></button><button aria-label={`Editar ${customer.name}`} title="Editar" onClick={() => { setError(''); setCustomerDraft({ ...emptyCustomer, ...customer, paymentTermDays:customer.payment_term_days??'', customerType: customer.customer_type || 'individual', taxIdentifier: customer.tax_identifier || '', postalCode: customer.postal_code || '', streetNumber: customer.street_number || '', addressComplement: customer.address_complement || '' }); setSelectedCustomer(customer); }}><Pencil size={16} /></button>{company.role === 'owner' && customer.archived_at && <button aria-label={`Restaurar ${customer.name}`} title="Restaurar" onClick={() => restoreCustomer(customer)}><Archive size={16} /></button>}{company.role === 'owner' && <button aria-label={`Excluir permanentemente ${customer.name}`} title="Excluir permanentemente" onClick={() => archiveCustomer(customer)}><X size={16} /></button>}</div></td>
             </tr>)}
           </tbody>
         </table>
@@ -216,7 +221,8 @@ export default function CustomersPage({ onCompanyChange }) {
       <div className="customers-pagination"><span>Mostrando {pagination.total ? pagination.offset + 1 : 0}–{Math.min(pagination.offset + customers.length, pagination.total)} de {pagination.total}</span><div><button aria-label="Página anterior" disabled={currentPage <= 1 || busy} onClick={() => loadCustomers(Math.max(0, pagination.offset - pagination.limit))}><ChevronLeft size={17} /></button><span>Página {currentPage} de {pages}</span><button aria-label="Próxima página" disabled={currentPage >= pages || busy} onClick={() => loadCustomers(pagination.offset + pagination.limit)}><ChevronRight size={17} /></button></div></div>
 
       {customerDraft && <CustomerForm draft={customerDraft} setDraft={setCustomerDraft} editing={Boolean(selectedCustomer)} busy={busy} error={error} onClose={() => { setCustomerDraft(null); setSelectedCustomer(null); setError(''); }} onSubmit={saveCustomer} />}
-      {detailsCustomer && <CustomerDetails customer={detailsCustomer} onClose={() => setDetailsCustomer(null)} onEdit={() => { setCustomerDraft({ ...emptyCustomer, ...detailsCustomer, customerType: detailsCustomer.customer_type || 'individual', taxIdentifier: detailsCustomer.tax_identifier || '', postalCode: detailsCustomer.postal_code || '', streetNumber: detailsCustomer.street_number || '', addressComplement: detailsCustomer.address_complement || '' }); setSelectedCustomer(detailsCustomer); setDetailsCustomer(null); }} />}
+      {statementCustomer&&<CustomerStatement customerId={statementCustomer} onClose={()=>setStatementCustomer(null)}/>}
+      {detailsCustomer && <CustomerDetails customer={detailsCustomer} onClose={() => setDetailsCustomer(null)} onEdit={() => { setCustomerDraft({ ...emptyCustomer, ...detailsCustomer, paymentTermDays:detailsCustomer.payment_term_days??'', customerType: detailsCustomer.customer_type || 'individual', taxIdentifier: detailsCustomer.tax_identifier || '', postalCode: detailsCustomer.postal_code || '', streetNumber: detailsCustomer.street_number || '', addressComplement: detailsCustomer.address_complement || '' }); setSelectedCustomer(detailsCustomer); setDetailsCustomer(null); }} />}
     </section>
   );
 }
@@ -226,7 +232,7 @@ function CustomerForm({ draft, setDraft, editing, busy, error, onClose, onSubmit
     <section className="customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-modal-title">
       <header className="customer-modal-heading"><div><span className="customers-kicker">CADASTRO DE CLIENTE</span><h2 id="customer-modal-title">{editing ? 'Editar cliente' : 'Novo cliente'}</h2></div><button className="modal-close" onClick={onClose} aria-label="Fechar" disabled={busy}><X size={18} /></button></header>
       <form className="customer-form" onSubmit={onSubmit}>
-        {formFields.map((field) => <label className={field.wide ? 'field-wide' : ''} key={field.name}>{field.label}{field.type === 'select' ? <select value={draft[field.name]} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })}>{field.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : field.type === 'textarea' ? <textarea value={draft[field.name] || ''} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })} maxLength={field.maxLength} rows="3" /> : <input value={draft[field.name] || ''} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })} type={field.type || 'text'} required={field.required} maxLength={field.maxLength || (field.name === 'name' ? 200 : undefined)} placeholder={field.placeholder || ''} />}</label>)}
+        {formFields.map((field) => <label className={field.wide ? 'field-wide' : ''} key={field.name}>{field.label}{field.type === 'select' ? <select value={draft[field.name]} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })}>{field.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : field.type === 'textarea' ? <textarea value={draft[field.name] || ''} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })} maxLength={field.maxLength} rows="3" /> : <input value={draft[field.name] || ''} onChange={(event) => setDraft({ ...draft, [field.name]: event.target.value })} type={field.type || 'text'} min={field.min} max={field.max} step={field.type==='number'?1:undefined} required={field.required} maxLength={field.maxLength || (field.name === 'name' ? 200 : undefined)} placeholder={field.placeholder || ''} />}</label>)}
         {error && <p className="customers-feedback error field-wide" role="alert">{error}</p>}
         <div className="customer-form-actions field-wide"><button type="button" className="customers-secondary" onClick={onClose} disabled={busy}>Cancelar</button><button className="customers-primary" disabled={busy}>{busy ? 'Salvando…' : editing ? 'Salvar alterações' : 'Cadastrar cliente'}</button></div>
       </form>
@@ -240,7 +246,7 @@ function CustomerDetails({ customer, onClose, onEdit }) {
     ['Telefone', customer.phone], ['E-mail', customer.email], ['CEP', customer.postal_code],
     ['Endereço', [customer.street, customer.street_number, customer.address_complement].filter(Boolean).join(', ')],
     ['Bairro', customer.neighborhood], ['Cidade / Estado', [customer.city, customer.state].filter(Boolean).join(' / ')],
-    ['Observações', customer.notes], ['Data de cadastro', displayDate(customer.created_at)],
+    ['Prazo padrão', customer.payment_term_days==null?'Não definido':`${customer.payment_term_days} dias`], ['Observações', customer.notes], ['Data de cadastro', displayDate(customer.created_at)],
   ];
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="customer-modal customer-details-modal" role="dialog" aria-modal="true" aria-labelledby="customer-details-title">

@@ -1,4 +1,7 @@
-import 'dotenv/config';
+import './env.js';
+import { requestDiagnostics } from './lib/observability.js';
+import {createOfflineRouter} from './routes/offline.js';
+import {createRequestPool} from './lib/request-pool.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -23,7 +26,7 @@ const allowedOrigins = new Set(
     .map((origin) => origin.trim())
     .filter(Boolean),
 );
-const pool = process.env.DATABASE_URL
+const rawPool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: true } : false,
@@ -33,7 +36,9 @@ const pool = process.env.DATABASE_URL
     })
   : null;
 
+const pool=createRequestPool(rawPool);
 app.disable('x-powered-by');
+app.use(requestDiagnostics());
 app.use(helmet());
 app.use(cors({
   origin(origin, callback) {
@@ -63,6 +68,7 @@ app.get('/api/health', (_request, response) => {
     status: 'ok',
     service: 'eletroagro-api',
     database: pool ? 'configured' : 'not_configured',
+    authentication: process.env.NEON_AUTH_ISSUER && process.env.NEON_AUTH_JWKS_URL ? 'configured' : 'not_configured',
     invitationEmail: invitationEmail.configured ? 'configured' : 'not_configured',
   });
 });
@@ -85,6 +91,7 @@ app.get('/api/session', requireNeonAuth, (request, response) => {
   response.json({ user: request.auth });
 });
 
+app.use('/api/offline',createOfflineRouter({pool,requireAuth:requireNeonAuth,requireDatabase}));
 app.use('/api/company', createCompaniesRouter({ pool, requireAuth: requireNeonAuth }));
 app.use('/api/customers', createCustomersRouter({
   pool,
