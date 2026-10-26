@@ -215,6 +215,9 @@ export default function App() {
         const authMessage = result.error.message || '';
         const authCode = result.error.code || '';
         const combinedAuthError = `${authCode} ${authMessage}`;
+        if (authCode === 'INVALID_ORIGIN' || /invalid origin/i.test(authMessage)) {
+          throw new Error('Este endereço de acesso não está autorizado. Abra o sistema em https://eletroagro-project.vercel.app/ e entre novamente.');
+        }
         if (!isSignUp && /email.*(not verified|unverified|not confirmed)|verify.*email|confirm.*email|EMAIL_NOT_VERIFIED/i.test(combinedAuthError)) {
           setAuthNotice('Seu e-mail ainda não foi confirmado. Abra a mensagem de confirmação que enviamos, confira também o spam e depois volte para entrar.');
           return;
