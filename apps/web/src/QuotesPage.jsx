@@ -29,7 +29,7 @@ function safeFilePart(value) {
   return String(value || 'cliente').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'cliente';
 }
 
-async function createQuotePdf(quote, company) {
+export async function createQuotePdf(quote, company) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const page = { width: 210, height: 297, margin: 16, contentBottom: 271, footerTop: 273 };
@@ -48,9 +48,9 @@ async function createQuotePdf(quote, company) {
   const drawCompactHeader = () => {
     fill(colors.forest); doc.rect(0, 0, page.width, 2.2, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setText(colors.forest);
-    doc.text(companyName, page.margin, 13);
+    doc.text(doc.splitTextToSize(companyName, 115).slice(0,2), page.margin, 11);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); setText(colors.muted);
-    doc.text(`ORÇAMENTO #${number}`, page.width - page.margin, 13, { align: 'right' });
+    doc.text(`ORÇAMENTO Nº ${number}`, page.width - page.margin, 13, { align: 'right' });
     stroke(colors.line); doc.line(page.margin, 18, page.width - page.margin, 18);
     y = 27;
   };
@@ -86,12 +86,13 @@ async function createQuotePdf(quote, company) {
   addContainedImage(doc, await loadPdfLogo(), { x: page.margin, y: 8, width: 28, height: 28 });
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(companyName.length > 24 ? 11.5 : 14); setText(colors.forest);
-  doc.text(doc.splitTextToSize(companyName, 82).slice(0, 2), 48, 15);
+  const companyNameLines=doc.splitTextToSize(companyName, 82).slice(0,2);
+  doc.text(companyNameLines, 48, 15);
   const companyDetails = [company?.tax_identifier && `CNPJ/CPF ${company.tax_identifier}`, company?.phone, company?.email].filter(Boolean);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(colors.muted);
-  if (companyDetails.length) doc.text(doc.splitTextToSize(companyDetails.join('  |  '), 82).slice(0, 2), 48, 22);
+  if (companyDetails.length) doc.text(doc.splitTextToSize(companyDetails.join('  |  '), 82).slice(0, 2), 48, companyNameLines.length>1?28:22);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(15); setText(colors.forest); doc.text('ORÇAMENTO', page.width - page.margin, 13, { align: 'right' });
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); setText(colors.ink); doc.text(`#${number}`, page.width - page.margin, 20, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); setText(colors.ink); doc.text(`Nº ${number}`, page.width - page.margin, 20, { align: 'right' });
   fill(statusColor); doc.roundedRect(page.width - page.margin - 35, 24, 35, 7, 3.5, 3.5, 'F');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.white); doc.text(statusLabels[quote.status] || quote.status, page.width - page.margin - 17.5, 28.7, { align: 'center' });
   stroke(colors.line); doc.setLineWidth(0.7); doc.line(page.margin, 41, page.width - page.margin, 41);
@@ -173,24 +174,27 @@ async function createQuotePdf(quote, company) {
     } else termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
   } else termsCards.forEach(([label, value]) => drawTextCard(label, value, page.margin, tableWidth));
 
-  ensureSpace(39);
+  doc.setFont('helvetica','bold');doc.setFontSize(9);
+  const signatureGap = 14, signatureWidth = (tableWidth - signatureGap) / 2;
+  const signerNames=[quote.customer_name||'Cliente',companyName].map(name=>doc.splitTextToSize(name,signatureWidth));
+  const signerHeight=Math.max(...signerNames.map(lines=>lines.length))*3.8;
+  ensureSpace(35+signerHeight);
   stroke(colors.line); doc.setLineWidth(0.35); doc.line(page.margin, y, page.width - page.margin, y); y += 8;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); setText(colors.forest); doc.text('ACEITE DA PROPOSTA', page.margin, y);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(colors.muted); doc.text('Assinaturas registram a concordância com os itens, valores e condições descritos.', page.margin, y + 5); y += 18;
-  const signatureGap = 14; const signatureWidth = (tableWidth - signatureGap) / 2;
   stroke([149, 166, 157]); doc.line(page.margin, y, page.margin + signatureWidth, y); doc.line(page.margin + signatureWidth + signatureGap, y, page.margin + tableWidth, y);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.ink);
-  doc.text(quote.customer_name || 'Cliente', page.margin, y + 5); doc.text(companyName, page.margin + signatureWidth + signatureGap, y + 5);
+  doc.text(signerNames[0], page.margin, y + 5); doc.text(signerNames[1], page.margin + signatureWidth + signatureGap, y + 5);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(colors.muted);
-  doc.text('CLIENTE  -  DATA: ____ / ____ / ______', page.margin, y + 9); doc.text('ELETROAGRO  -  RESPONSÁVEL', page.margin + signatureWidth + signatureGap, y + 9);
+  doc.text('CLIENTE  -  DATA: ____ / ____ / ______', page.margin, y + 6 + signerHeight); doc.text('ELETROAGRO  -  RESPONSÁVEL', page.margin + signatureWidth + signatureGap, y + 6 + signerHeight);
 
   const pages = doc.getNumberOfPages();
   for (let index = 1; index <= pages; index += 1) {
     doc.setPage(index); fill(colors.forest); doc.rect(0, page.footerTop + 10, page.width, page.height - page.footerTop - 10, 'F');
     fill(colors.gold); doc.rect(0, page.footerTop + 10, page.width, 1.2, 'F');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.white);
-    doc.text(companyName.toUpperCase(), page.margin, page.footerTop + 16);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(company?.document_settings?.footerText || 'ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL', page.width / 2, page.footerTop + 16, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.2); setText(colors.white);
+    doc.text(doc.splitTextToSize(companyName.toUpperCase(),50).slice(0,2), page.margin, page.footerTop + 16);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); doc.text(doc.splitTextToSize(company?.document_settings?.footerText || 'ORÇAMENTO COMERCIAL - NÃO É DOCUMENTO FISCAL',70).slice(0,2), page.width / 2, page.footerTop + 16, { align: 'center' });
     doc.text(`Página ${index} de ${pages}`, page.width - page.margin, page.footerTop + 16, { align: 'right' });
   }
   const filename=`orcamento-${number}-${safeFilePart(quote.customer_name)}.pdf`;await archivePdf(doc,filename);return {doc,filename};

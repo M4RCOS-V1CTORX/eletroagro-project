@@ -39,7 +39,7 @@ export function addContainedImage(doc, image, box) {
   doc.addImage(image.data, image.format || 'JPEG', box.x + (box.width - width) / 2, box.y + (box.height - height) / 2, width, height);
 }
 
-export function drawPdfHeader(doc, { company, title, number = '', numberPrefix = '#', subtitle = '', status = '', palette = createPdfPalette(company), logo = null, compact = false }) {
+export function drawPdfHeader(doc, { company, title, number = '', numberPrefix = 'Nº ', subtitle = '', status = '', palette = createPdfPalette(company), logo = null, compact = false }) {
   const { width, margin } = PDF_PAGE; const height = compact ? 24 : 43;
   doc.setFillColor(...palette.white); doc.rect(0, 0, width, height, 'F'); doc.setFillColor(...palette.accent); doc.rect(0, 0, width, 2.2, 'F');
   if (compact) {

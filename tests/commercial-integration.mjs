@@ -24,14 +24,15 @@ const rawPool={query:async(...args)=>{const unlock=await acquire();try{return aw
 const pool=createRequestPool(rawPool);
 try{
   const files=(await readdir(new URL('../apps/api/src/db/migrations/',import.meta.url))).filter(f=>f.endsWith('.sql')).sort();
-  for(const file of files.filter(f=>!f.startsWith('010')))await db.exec(await readFile(new URL(`../apps/api/src/db/migrations/${file}`,import.meta.url),'utf8'));
+  for(const file of files.filter(f=>f<'010'))await db.exec(await readFile(new URL(`../apps/api/src/db/migrations/${file}`,import.meta.url),'utf8'));
   const company=(await db.query("INSERT INTO public.companies(name) VALUES('Empresa de teste isolado') RETURNING id")).rows[0].id;
   await db.query("INSERT INTO public.company_memberships(company_id,auth_issuer,auth_subject,role,email) VALUES($1,'test','owner','owner','teste@example.invalid')",[company]);
   const customer=(await db.query("INSERT INTO public.customers(company_id,name) VALUES($1,'Cliente de teste isolado') RETURNING id",[company])).rows[0].id;
   const old=(await db.query("INSERT INTO public.sales(company_id,sale_number,customer_id,customer_name,payment_method,payment_status,sale_date,subtotal,discount_amount,total,amount_paid,created_by_subject) VALUES($1,25,$2,'Cliente antigo','pix','pending','2026-10-13',100,0,100,0,'owner') RETURNING id",[company,customer])).rows[0].id;
   await db.exec(await readFile(new URL('../apps/api/src/db/migrations/010_farm_commercial.sql',import.meta.url),'utf8'));
+  for(const file of files.filter(f=>f>'010_farm_commercial.sql'))await db.exec(await readFile(new URL(`../apps/api/src/db/migrations/${file}`,import.meta.url),'utf8'));
   const preserved=(await db.query('SELECT sale_number,sale_year,total FROM public.sales WHERE id=$1',[old])).rows[0];assert.equal(Number(preserved.sale_number),25);assert.equal(preserved.sale_year,2026);assert.equal(preserved.total,'100.00');
-  console.log('✓ Dez migrações aplicadas; números e valores antigos preservados.');
+  console.log('✓ Migrações aplicadas; números e valores antigos preservados.');
   await db.query('UPDATE public.customers SET payment_term_days=8 WHERE id=$1',[customer]);
   const auth=(req,res,next)=>{req.auth={issuer:'test',subject:req.get('x-test-user')||'owner'};next();};
   const deps={pool,requireAuth:auth,requireDatabase:()=>((req,res,next)=>next())};
@@ -102,6 +103,27 @@ try{
   const parallelKey=randomUUID(),parallel=await Promise.all([call('/api/sales',{...draft,freightCost:'0'},201,{'X-Idempotency-Key':parallelKey}),call('/api/sales',{...draft,freightCost:'0'},201,{'X-Idempotency-Key':parallelKey})]);assert.equal(parallel[0].sale.id,parallel[1].sale.id);
   await call('/api/operations/finance',{entryType:'expense',title:'Parcela inválida',amount:'0.01',scheduleMode:'installments',scheduleCount:2},400);
   console.log('✓ Falha após escrita reverte dados e chave; reenvios simultâneos criam uma única venda.');
+  async function expenseRequest(path,method='GET',body,expected=200,headers={}){const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();assert.equal(response.status,expected,JSON.stringify(result));return result;}
+  const expenseOne=(await call('/api/operations/finance',{entryType:'expense',title:'QA Despesa manutenção',expenseCategory:'Manutenção',amount:'100.00',competenceDate:'2026-01-01',dueDate:'2026-01-02',notes:'Preservar observações',businessActivity:'farm'},201)).entry;
+  const expenseTwo=(await call('/api/operations/finance',{entryType:'expense',title:'QA Despesa paga',amount:'50.00',competenceDate:'2026-01-01',dueDate:'2026-01-02',status:'settled',settledAt:'2026-01-02',paymentMethod:'pix'},201)).entry;
+  const expenseThree=(await call('/api/operations/finance',{entryType:'expense',title:'QA Despesa cancelável',amount:'20.00',competenceDate:'2026-01-01',dueDate:'2026-01-02'},201)).entry;
+  const expenseEdited=(await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id,'PATCH',{title:'QA Despesa manutenção revisada',amount:'120.00',expectedUpdatedAt:expenseOne.updated_at})).entry;assert.equal(expenseEdited.expense_category,'Manutenção');assert.equal(expenseEdited.notes,'Preservar observações');assert.equal(expenseEdited.amount,'120.00');
+  await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id,'PATCH',{amount:'0.001',expectedUpdatedAt:expenseEdited.updated_at},400);
+  await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id,'PATCH',{amount:'80',expectedUpdatedAt:'2020-01-01T00:00:00Z'},409);
+  await expenseRequest('/api/operations/finance/expenses/'+expenseTwo.id,'PATCH',{amount:'80',expectedUpdatedAt:expenseTwo.updated_at},409);
+  await expenseRequest('/api/operations/finance/expenses/'+expenseThree.id+'/cancel','POST',{confirmation:'errada',expectedUpdatedAt:expenseThree.updated_at},400);
+  await expenseRequest('/api/operations/finance/expenses/'+expenseThree.id+'/cancel','POST',{confirmation:expenseThree.title,expectedUpdatedAt:expenseThree.updated_at});
+  await call('/api/operations/finance/'+expenseOne.id+'/payments',{amount:'10.00',paymentMethod:'cash',paidAt:'2026-01-02'},201);
+  const expenseDetail=(await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id)).entry;assert.equal(expenseDetail.payments.length,1);assert.equal(expenseDetail.balance,'110.00');
+  await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id+'/cancel','POST',{confirmation:expenseDetail.title,expectedUpdatedAt:expenseDetail.updated_at},409);
+  const expensesFiltered=await expenseRequest('/api/operations/finance/expenses?q=QA%20Despesa&from=2026-01-01&to=2030-01-01&limit=1');assert.equal(expensesFiltered.pagination.total,3);assert.equal(expensesFiltered.entries.length,1);assert.equal(expensesFiltered.summary.total,'170.00');assert.equal(expensesFiltered.summary.paid,'60.00');assert.equal(expensesFiltered.summary.pending,'110.00');assert.equal(expensesFiltered.summary.overdue,'110.00');
+  const settledExpense=await expenseRequest('/api/operations/finance/expenses?q=QA%20Despesa&status=settled&paymentMethod=pix');assert.equal(settledExpense.pagination.total,1);assert.equal(settledExpense.summary.total,'50.00');
+  await expenseRequest('/api/operations/finance/expenses/'+expenseOne.id,'GET',null,404,{'x-test-user':'other'});
+  await expenseRequest('/api/operations/finance/expenses','GET',null,403,{'x-test-user':'restricted'});
+  await expenseRequest('/api/operations/finance/expenses?from=2026-02-30','GET',null,400);
+  const categoryUpdated=(await expenseRequest('/api/operations/finance/expenses/'+expenseTwo.id+'/category','PATCH',{expenseCategory:'Energia',expectedUpdatedAt:expenseTwo.updated_at})).entry;assert.equal(categoryUpdated.status,'settled');assert.equal(categoryUpdated.amount,'50.00');assert.equal(categoryUpdated.expense_category,'Energia');
+  const byCategory=await expenseRequest('/api/operations/finance/expenses?category=Energia&q=QA%20Despesa');assert.equal(byCategory.pagination.total,1);assert.equal(byCategory.summary.paid,'50.00');assert(byCategory.categories.includes('Manutenção'));
+  console.log('✓ Despesas: filtros combinados, indicadores exatos, paginação, detalhes, edição, concorrência, cancelamento e permissões.');
   app.use('/api/suppliers',createSuppliersRouter(deps));
   if(process.argv.includes('--serve')){
     const webRequire=createRequire(new URL('../apps/web/package.json',import.meta.url));

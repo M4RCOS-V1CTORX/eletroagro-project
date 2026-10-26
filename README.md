@@ -61,7 +61,7 @@ Depois de configurar uma URL PostgreSQL de desenvolvimento, aplique as migraçõ
 - Orçamentos recebem numeração sequencial por empresa, preservam os dados do cliente e snapshots dos itens, calculam os totais na API e permitem acompanhar as transições de status.
 - Vendas recebem numeração sequencial por empresa, podem ser registradas diretamente ou convertidas de orçamentos aprovados, preservam os itens e clientes como snapshots, acompanham recebimentos parciais e geram comprovante PDF. Vendas e compras alimentam o Financeiro; compras e vendas movimentam saldos de estoque quando o produto está sendo controlado.
 - O Financeiro acompanha receitas e despesas, vencimentos, pagamentos parciais, saldos pendentes e exportação CSV. Ele não substitui contabilidade, conciliação bancária ou emissão fiscal.
-- Ordens de serviço podem partir de orçamento aprovado ou venda, acompanhar prioridade e situação, registrar materiais usados com baixa de estoque e gerar PDF. A agenda organiza compromissos por semana e associa clientes e ordens.
+- A tela Despesas substitui Ordens de serviço no menu do cliente. Acompanha contas, categorias próprias, filtros, indicadores, pagamentos e cancelamento protegido; compartilha os lançamentos do Financeiro. Dados de ordens anteriores são preservados. Consulte `DESPESAS.md`. A agenda continua disponível.
 - O responsável pode gerar códigos de convite de equipe com validade de sete dias, suspender ou restaurar acessos e consultar ações auditadas. O código precisa ser compartilhado manualmente; não há envio automático de e-mail.
 - O sistema inclui recuperação de senha pelo Neon Auth, PWA instalável, indicador de conexão e fila segura no IndexedDB para operações selecionadas de cadastros, agenda, estoque e financeiro. A fila armazena somente rota e conteúdo da operação; tokens de sessão não são persistidos.
 - Relatórios gerenciais consolidam vendas, receitas, despesas, aprovação de orçamentos, serviços, estoque baixo, principais clientes e atividade por usuário, com exportação CSV e PDF.
@@ -72,7 +72,7 @@ Depois de configurar uma URL PostgreSQL de desenvolvimento, aplique as migraçõ
 - Lembretes usam a API de notificações do navegador quando autorizados e o aplicativo está aberto. Notificação remota com o aplicativo totalmente fechado exige um serviço de push externo.
 - A aparência dos PDFs pode ser personalizada em Configurações, incluindo cor, rodapé e campo de assinatura.
 - A API limita CORS às origens exatas definidas em `WEB_ORIGIN` (mais localhost para desenvolvimento). Mantenha essa variável alinhada ao domínio do frontend.
-- Documentos financeiros e alterações críticas continuam exigindo conexão atualizada. Isso evita conflitos silenciosos de estoque, numeração ou pagamentos entre dispositivos.
+- Vendas, recebimentos, recibos, despesas e outras operações habilitadas podem ser registrados offline após preparar o aparelho. Documentos locais permanecem provisórios até a confirmação. Edição/classificação/cancelamento de despesas, configurações e exclusões exigem conexão. Consulte `GUIA-OFFLINE.md`.
 - O Financeiro é um controle gerencial; não substitui contabilidade, conciliação bancária ou emissão fiscal.
 - A suíte automatizada valida datas, dinheiro, quantidades, parcelas, permissões, segurança do PWA e migrações. `npm run test:db` valida os novos recursos diretamente no PostgreSQL dentro de uma transação revertida.
 - A especificação completa de requisitos está em `gabarito do sistema.txt`; itens descritos nela que não aparecem como implementados acima ainda são escopo pendente.
@@ -101,3 +101,11 @@ npm test
 npm run test:db
 npm run build:web
 ```
+
+## Retomada de 26/10/2026
+
+Categorias próprias de despesas exigem a migração `011_expense_categories.sql`, aplicada no Neon autorizado após backup verificado. Em outro ambiente, faça backup antes de migrar. Todos os PDFs numerados usam Nº; documentos já baixados devem ser gerados novamente.
+
+Verificação isolada: `npm test`, `npm run test:commercial-db`, `node tests/auth-integration.mjs` e `npm run build:web`. A integração comercial utiliza banco descartável e não usa DATABASE_URL. O teste de autenticação usa assinatura temporária e JWKS local, sem conta Neon.
+
+A homologação completa do login com conta real e de Android/iPhone físicos permanece pendente. Consulte `CONTINUIDADE.md` para o alcance e os limites da verificação.

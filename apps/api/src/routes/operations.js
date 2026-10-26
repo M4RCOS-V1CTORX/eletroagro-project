@@ -1,4 +1,5 @@
 import {operationLookups} from '../lib/lookups.js';
+import {createExpensesRouter} from './expenses.js';
 import { Router } from 'express';
 import { activities } from '../lib/commercial.js';
 import { randomUUID } from 'node:crypto';
@@ -58,6 +59,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
   router.use(idempotencyGuard(pool));
   const companyId = (req) => req.company.company_id;
   const actor = (req) => req.auth.subject;
+  router.use('/finance/expenses',createExpensesRouter({pool,validDate,money,moneyText}));
 
   router.get('/lookups',async(req,res)=>{try{const access=Object.fromEntries(['commercial','operations','finance'].map(area=>[area,req.company.role==='owner'||req.company.permissions?.[area]!==false]));return res.json(await operationLookups(pool,companyId(req),access));}catch(error){return fail(res,error,'carregar as opções da operação');}});
   router.get('/dashboard', async (req, res) => {
@@ -137,6 +139,8 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
   router.post('/finance', async (req,res) => {
     const body=req.body||{}; if(!activities.has(body.businessActivity??'unassigned'))return res.status(400).json({error:{message:'Selecione uma atividade válida.'}}); const type=body.entryType; const title=typeof body.title==='string'?body.title.trim():'';
     const amount=money(body.amount); const status=body.status==='settled'?'settled':'pending';
+    const expenseCategory=body.expenseCategory==null||body.expenseCategory===''?null:typeof body.expenseCategory==='string'?body.expenseCategory.trim().replace(/\s+/g,' '):false;
+    if(expenseCategory===false||expenseCategory!==null&&(expenseCategory.length<2||expenseCategory.length>80))return res.status(400).json({error:{code:'INVALID_EXPENSE_CATEGORY',message:'Informe uma categoria de 2 a 80 caracteres.'}});
     if(!['income','expense'].includes(type)||title.length<2||title.length>180||amount===null||amount<=0n) return res.status(400).json({error:{code:'INVALID_FINANCIAL_ENTRY',message:'Confira o tipo, a descrição e o valor do lançamento.'}});
     if(body.dueDate&&!validDate(body.dueDate)||body.competenceDate&&!validDate(body.competenceDate)) return res.status(400).json({error:{code:'INVALID_FINANCIAL_DATE',message:'Confira as datas informadas.'}});
     if(status==='settled'&&!paymentMethods.has(body.paymentMethod)) return res.status(400).json({error:{code:'INVALID_PAYMENT_METHOD',message:'Selecione uma forma de pagamento válida.'}});
@@ -146,6 +150,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     const frequency=body.scheduleFrequency==='week'?'week':'month';
     if(scheduleMode==='installments'&&amount<BigInt(requestedCount))return res.status(400).json({error:{code:'INSTALLMENT_TOO_SMALL',message:'O valor deve permitir ao menos um centavo por parcela.'}});
     const recurrenceGroup=requestedCount>1?randomUUID():null;
+    const withExpenseCategory=type==='expense'&&expenseCategory!==null;
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
@@ -155,14 +160,14 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
         const entryTitle=requestedCount>1?`${title} · ${index+1}/${requestedCount}`:title;
         const competenceDate=shiftedDate(body.competenceDate||new Date().toISOString().slice(0,10),index,frequency);
         const dueDate=body.dueDate?shiftedDate(body.dueDate,index,frequency):null;
-        const result=await client.query(`INSERT INTO public.financial_entries(company_id,entry_type,title,amount,competence_date,due_date,settled_at,status,payment_method,customer_id,supplier_id,notes,created_by_subject,recurrence_group,installment_number,installment_count,business_activity)
-          VALUES($1,$2,$3,$4,$5::date,$6::date,CASE WHEN $7='settled' THEN COALESCE($8::date,CURRENT_DATE) END,$7,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,[companyId(req),type,entryTitle,moneyText(entryAmount),competenceDate,dueDate,status,body.settledAt||null,status==='settled'?body.paymentMethod:null,type==='income'&&uuidPattern.test(body.customerId||'')?body.customerId:null,type==='expense'&&uuidPattern.test(body.supplierId||'')?body.supplierId:null,typeof body.notes==='string'?body.notes.trim().slice(0,3000):null,actor(req),recurrenceGroup,requestedCount>1?index+1:null,requestedCount>1?requestedCount:null,body.businessActivity??'unassigned']);
+        const result=await client.query(`INSERT INTO public.financial_entries(company_id,entry_type,title,amount,competence_date,due_date,settled_at,status,payment_method,customer_id,supplier_id,notes,created_by_subject,recurrence_group,installment_number,installment_count,business_activity${withExpenseCategory?',expense_category':''})
+          VALUES($1,$2,$3,$4,$5::date,$6::date,CASE WHEN $7='settled' THEN COALESCE($8::date,CURRENT_DATE) END,$7,$9,$10,$11,$12,$13,$14,$15,$16,$17${withExpenseCategory?',$18':''}) RETURNING *`,[companyId(req),type,entryTitle,moneyText(entryAmount),competenceDate,dueDate,status,body.settledAt||null,status==='settled'?body.paymentMethod:null,type==='income'&&uuidPattern.test(body.customerId||'')?body.customerId:null,type==='expense'&&uuidPattern.test(body.supplierId||'')?body.supplierId:null,typeof body.notes==='string'?body.notes.trim().slice(0,3000):null,actor(req),recurrenceGroup,requestedCount>1?index+1:null,requestedCount>1?requestedCount:null,body.businessActivity??'unassigned',...(withExpenseCategory?[expenseCategory]:[])]);
         entries.push(result.rows[0]);
         if(status==='settled') {const initialPayment=await client.query(`INSERT INTO public.financial_payments(company_id,entry_id,amount,payment_method,paid_at,created_by_subject) VALUES($1,$2,$3,$4,COALESCE($5::date,CURRENT_DATE),$6) RETURNING id`,[companyId(req),result.rows[0].id,moneyText(entryAmount),body.paymentMethod,body.settledAt||null,actor(req)]);financialPaymentId=initialPayment.rows[0].id;}
       }
       await audit(client,companyId(req),actor(req),'created', 'financial_entry',entries[0].id,{entryType:type,title,amount:moneyText(amount),scheduleMode,count:requestedCount});
       await client.query('COMMIT'); return res.status(201).json({entry:entries[0],entries,financialPaymentId});
-    } catch(error) { await client.query('ROLLBACK').catch(()=>{}); if(error.code==='23503')return res.status(400).json({error:{code:'INVALID_RELATED_RECORD',message:'Cliente ou fornecedor não encontrado.'}}); return fail(res,error,'registrar o lançamento'); }
+    } catch(error) { await client.query('ROLLBACK').catch(()=>{}); if(error.code==='42703'&&/expense_category/.test(error.message))return res.status(503).json({error:{code:'EXPENSE_MIGRATION_REQUIRED',message:'A atualização de categorias precisa ser aplicada ao banco. Seus dados foram preservados.'}}); if(error.code==='23503')return res.status(400).json({error:{code:'INVALID_RELATED_RECORD',message:'Cliente ou fornecedor não encontrado.'}}); return fail(res,error,'registrar o lançamento'); }
     finally {client.release();}
   });
 
@@ -230,7 +235,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
 
   router.get('/appointments',async(req,res)=>{const from=validDate(req.query.from)?req.query.from:null;const to=validDate(req.query.to)?req.query.to:null;try{const result=await pool.query(`SELECT a.*,c.name AS customer_name,so.order_number FROM public.appointments a LEFT JOIN public.customers c ON c.company_id=a.company_id AND c.id=a.customer_id LEFT JOIN public.service_orders so ON so.company_id=a.company_id AND so.id=a.service_order_id WHERE a.company_id=$1 AND ($2::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date >= $2) AND ($3::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date <= $3) ORDER BY a.starts_at LIMIT 300`,[companyId(req),from,to]);return res.json({appointments:result.rows});}catch(error){return fail(res,error,'consultar a agenda');}});
 
-  router.post('/appointments',async(req,res)=>{const b=req.body||{};const title=typeof b.title==='string'?b.title.trim():'';if(title.length<2||title.length>180||!b.startsAt||Number.isNaN(Date.parse(b.startsAt))||b.endsAt&&Number.isNaN(Date.parse(b.endsAt)))return res.status(400).json({error:{code:'INVALID_APPOINTMENT',message:'Informe título e horários válidos.'}});try{const result=await pool.query(`INSERT INTO public.appointments(company_id,customer_id,service_order_id,title,starts_at,ends_at,address,notes,created_by_subject) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[companyId(req),uuidPattern.test(b.customerId||'')?b.customerId:null,uuidPattern.test(b.serviceOrderId||'')?b.serviceOrderId:null,title,b.startsAt,b.endsAt||null,String(b.address||'').slice(0,500),String(b.notes||'').slice(0,3000),actor(req)]);await audit(pool,companyId(req),actor(req),'created','appointment',result.rows[0].id,{title});return res.status(201).json({appointment:result.rows[0]});}catch(error){return fail(res,error,'agendar o compromisso');}});
+  router.post('/appointments',async(req,res)=>{const b=req.body||{};const title=typeof b.title==='string'?b.title.trim():'';if(title.length<2||title.length>180||!b.startsAt||Number.isNaN(Date.parse(b.startsAt))||b.endsAt&&(Number.isNaN(Date.parse(b.endsAt))||Date.parse(b.endsAt)<=Date.parse(b.startsAt)))return res.status(400).json({error:{code:'INVALID_APPOINTMENT',message:'Informe título e horários válidos.'}});try{const result=await pool.query(`INSERT INTO public.appointments(company_id,customer_id,service_order_id,title,starts_at,ends_at,address,notes,created_by_subject) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[companyId(req),uuidPattern.test(b.customerId||'')?b.customerId:null,uuidPattern.test(b.serviceOrderId||'')?b.serviceOrderId:null,title,b.startsAt,b.endsAt||null,String(b.address||'').slice(0,500),String(b.notes||'').slice(0,3000),actor(req)]);await audit(pool,companyId(req),actor(req),'created','appointment',result.rows[0].id,{title});return res.status(201).json({appointment:result.rows[0]});}catch(error){return fail(res,error,'agendar o compromisso');}});
 
   router.patch('/appointments/:id/status',async(req,res)=>{if(!uuidPattern.test(req.params.id)||!['scheduled','completed','cancelled'].includes(req.body?.status))return res.status(400).json({error:{code:'INVALID_APPOINTMENT_STATUS',message:'Situação inválida.'}});try{const result=await pool.query('UPDATE public.appointments SET status=$3,updated_at=now() WHERE company_id=$1 AND id=$2 RETURNING *',[companyId(req),req.params.id,req.body.status]);if(!result.rowCount)return res.status(404).json({error:{code:'APPOINTMENT_NOT_FOUND',message:'Compromisso não encontrado.'}});await audit(pool,companyId(req),actor(req),'status_changed','appointment',req.params.id,{status:req.body.status});return res.json({appointment:result.rows[0]});}catch(error){return fail(res,error,'atualizar o compromisso');}});
 

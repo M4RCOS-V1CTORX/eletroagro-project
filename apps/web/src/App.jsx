@@ -14,7 +14,7 @@ const SuppliersPage = lazy(() => import('./SuppliersPage.jsx'));
 const SalesPage = lazy(() => import('./SalesPage.jsx'));
 const OverviewPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.OverviewPage })));
 const FinancePage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.FinancePage })));
-const ServiceOrdersPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.ServiceOrdersPage })));
+const ExpensesPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.ExpensesPage })));
 const AgendaPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AgendaPage })));
 const StockPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.StockPage })));
 const AuditPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AuditPage })));
@@ -29,7 +29,7 @@ const navigation = [
   { label: 'Fornecedores', icon: BriefcaseBusiness, key: 'suppliers' },
   { label: 'Orçamentos', icon: ClipboardList, key: 'quotes' },
   { label: 'Vendas', icon: CircleDollarSign, key: 'sales' },
-  { label: 'Ordens de serviço', icon: Bolt, key: 'orders' },
+  { label: 'Despesas', icon: ReceiptText, key: 'expenses' },
   { label: 'Estoque', icon: Package, key: 'stock' },
   { label: 'Financeiro', icon: ChartNoAxesCombined, key: 'finance' },
   { label: 'Recibos', icon: ReceiptText, key: 'receipts' },
@@ -41,14 +41,14 @@ const navigation = [
 const desktopNavigationGroups = [
   { label: 'PAINEL', keys: ['overview'] },
   { label: 'COMERCIAL', keys: ['customers', 'catalog', 'suppliers', 'quotes', 'sales'] },
-  { label: 'OPERAÇÃO', keys: ['orders', 'stock', 'agenda'] },
+  { label: 'OPERAÇÃO', keys: ['expenses', 'stock', 'agenda'] },
   { label: 'GESTÃO', keys: ['finance', 'receipts', 'reports', 'audit'] },
 ];
 
-const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', orders: 'Ordens de serviço', stock: 'Estoque', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
+const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', expenses: 'Despesas', stock: 'Estoque', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
 const mobilePrimaryKeys = ['overview', 'customers', 'quotes', 'sales'];
 const mobileMoreGroups = [
-  { label: 'Operação', keys: ['orders', 'stock', 'finance', 'agenda'] },
+  { label: 'Operação', keys: ['expenses', 'stock', 'finance', 'agenda'] },
   { label: 'Cadastros', keys: ['catalog', 'suppliers'] },
   { label: 'Gestão', keys: ['receipts', 'reports', 'audit', 'settings'] },
 ];
@@ -303,7 +303,7 @@ export default function App() {
 
   const apiLabel = apiStatus === 'online' ? 'API conectada' : apiStatus === 'checking' ? 'Verificando API' : 'API desconectada';
   const ApiIcon = apiStatus === 'online' ? Wifi : WifiOff;
-  const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', orders: 'operations', stock: 'operations', agenda: 'operations', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
+  const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', expenses: 'finance', stock: 'operations', agenda: 'operations', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
   const canUsePage = (key) => user.company?.role === 'owner' || !permissionArea[key] || user.company?.permissions?.[permissionArea[key]] !== false;
   async function installApplication() { if (!installPrompt) return; await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null); }
 
@@ -339,7 +339,7 @@ export default function App() {
         </header>
         <OfflineTools/>
         <ModuleBoundary page={page}><Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
-          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'orders' ? <ServiceOrdersPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
+          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'expenses' ? <ExpensesPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
         </Suspense></ModuleBoundary>
       </main>
       {mobileMoreOpen && <>

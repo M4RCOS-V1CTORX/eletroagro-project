@@ -1,4 +1,5 @@
 import {localToday,saleNumber} from './commercial.js';
+import {offlineExpenses} from './expenseData.js';
 import {decimal,units} from './offlineModel.js';
 const sum=(rows,key)=>decimal(rows.reduce((n,row)=>n+units(row[key]||'0'),0n));
 const text=value=>String(value||'').toLocaleLowerCase('pt-BR');
@@ -15,6 +16,8 @@ export function readOffline(data,path){
   const entryRows=data.entries.map(e=>({...e,balance:balance(e),customer_name:customer(e.customer_id)?.name,supplier_name:supplier(e.supplier_id)?.name,overdue:e.status==='pending'&&e.due_date&&date(e.due_date)<today}));
   const saleRows=data.sales.map(s=>({...s,amount_due:balance(s),overdue:s.status==='completed'&&s.payment_status!=='paid'&&s.due_date&&date(s.due_date)<today}));
   let match;
+  if(p==='/api/operations/finance/expenses'){can('finance');const {all,...result}=offlineExpenses(data,q);return result;}
+  if((match=/^\/api\/operations\/finance\/expenses\/([\da-f-]+)$/.exec(p))){can('finance');const entry=offlineExpenses(data,new URLSearchParams()).all.find(e=>e.id===match[1]);if(!entry)throw new Error('Despesa não encontrada neste aparelho.');return{entry};}
   if(p==='/api/operations/lookups'){if(data.access.operations===false&&data.access.finance===false)throw new Error('Seu perfil não permite acessar estas opções.');const merge=(first,second)=>[...new Map([...first,...second].map(row=>[row.id,row])).values()].filter(row=>!row.archived_at&&row.is_active!==false);return{access:data.access,customers:merge(data.lookups?.customers||[],data.customers).map(({id,name})=>({id,name})),catalog:merge(data.lookups?.catalog||[],data.catalog.filter(r=>r.item_type==='product')).map(({id,name,unit,item_type,is_active,minimum_stock})=>({id,name,unit,item_type,is_active,minimum_stock})),suppliers:merge(data.lookups?.suppliers||[],data.suppliers).map(({id,name})=>({id,name}))};}
   if(p==='/api/operations/service-order-sources'){can('operations');return{quotes:data.quotes.filter(q=>q.status==='approved'&&!q.archived_at&&!data.orders.some(o=>o.quote_id===q.id)),sales:saleRows.filter(s=>s.status==='completed'&&!data.orders.some(o=>o.sale_id===s.id))};}
   if(p==='/api/company/me')return{company:data.company};
@@ -41,7 +44,7 @@ export function readOffline(data,path){
   }
   if((match=/^\/api\/sales\/([\da-f-]+)$/.exec(p))){can('commercial');const sale=saleRows.find(r=>r.id===match[1]);if(!sale)throw new Error('Venda não encontrada neste aparelho.');return{sale};}
   if(p==='/api/operations/finance'){
-    can('finance');const filtered=entryRows.filter(r=>activity(r,q)&&range(r.due_date||r.competence_date,q));const payments=data.financialPayments.filter(pay=>range(pay.paid_at,q)&&filtered.some(e=>e.id===pay.entry_id));
+    can('finance');const filtered=entryRows.filter(r=>activity(r,q)&&range(r.due_date||r.competence_date,q)&&(!q.get('type')||q.get('type')==='all'||r.entry_type===q.get('type')));const payments=data.financialPayments.filter(pay=>range(pay.paid_at,q)&&filtered.some(e=>e.id===pay.entry_id));
     const values=type=>payments.filter(pay=>data.entries.find(e=>e.id===pay.entry_id)?.entry_type===type);
     return{entries:filtered.filter(r=>(!q.get('type')||q.get('type')==='all'||r.entry_type===q.get('type'))&&(!q.get('status')||q.get('status')==='all'||r.status===q.get('status'))&&(!search||text(`${r.title} ${r.customer_name||''} ${r.supplier_name||''}`).includes(search))),summary:{income:sum(values('income'),'amount'),expense:sum(values('expense'),'amount'),receivable:sum(filtered.filter(e=>e.entry_type==='income'&&e.status==='pending').map(e=>({value:e.balance})),'value'),payable:sum(filtered.filter(e=>e.entry_type==='expense'&&e.status==='pending').map(e=>({value:e.balance})),'value'),overdue_count:filtered.filter(e=>e.overdue).length}};
   }
