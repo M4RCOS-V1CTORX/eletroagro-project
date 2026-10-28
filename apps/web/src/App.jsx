@@ -5,7 +5,7 @@ import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAx
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 import OfflineTools from './OfflineTools.jsx';
-import { apiRequest,setApiContext,offlineSession,rememberOfflineSession,forgetOfflineSession,offlineLogoutPending,clearOfflineLogout,prepareOfflineState, flushOfflineQueue, offlineQueueCount } from './apiClient.js';
+import { apiRequest,setApiContext,offlineSession,rememberOfflineSession,forgetOfflineSession,offlineLogoutPending,clearOfflineLogout,prepareOfflineState, flushOfflineQueue, offlineQueueCount,offlineStatus } from './apiClient.js';
 import { useDialogAccessibility } from './useDialogAccessibility.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
 const CatalogPage = lazy(() => import('./CatalogPage.jsx'));
@@ -155,27 +155,43 @@ export default function App() {
   useEffect(() => {
     let active = true;
     async function restoreSession() {
-      if(!navigator.onLine){
-        try{const saved=await offlineSession();if(saved){setApiContext({issuer:saved.issuer,subject:saved.subject,companyId:saved.company.id});if(active){setUser(saved);setCompanyName(saved.company.name);setAuthLoading(false);}return;}}
-        catch(error){if(active)setAuthError(error.message);}
-      }
-      if (!authClient) {
-        setAuthError('Configure VITE_NEON_AUTH_URL em apps/web/.env para ativar o acesso.');
-        setAuthLoading(false);
-        return;
-      }
+      const restoreOffline=async()=>{
+        if(await offlineLogoutPending())return false;
+        const saved=await offlineSession();
+        if(!saved?.company?.id)return false;
+        setApiContext({issuer:saved.issuer,subject:saved.subject,companyId:saved.company.id});
+        if(!(await offlineStatus()).prepared)return false;
+        if(active){setUser(saved);setCompanyName(saved.company.name);}
+        return true;
+      };
+      const apiReachable=async()=>{
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),4500);
+        try{
+          const response=await fetch(`${apiUrl}/api/health`,{cache:'no-store',signal:controller.signal});
+          return response.status<500;
+        }catch{return false;}
+        finally{clearTimeout(timeout);}
+      };
       try {
-        if(await offlineLogoutPending()){const result=await authClient.signOut();if(result?.error)throw new Error('Não foi possível concluir a saída anterior. Tente novamente com conexão.');await clearOfflineLogout();}
-        const result = await readAuthSessionWithRetry();
-        if (result.data?.session && result.data?.user) {
-          const verifiedUser = await verifyApiSession(result);
-          if (active) { setUser(verifiedUser); setCompanyName(verifiedUser.company?.name || ''); }
+        // Safari on iOS can keep navigator.onLine=true after the connection drops.
+        if(!navigator.onLine||!(await apiReachable())){
+          if(await restoreOffline())return;
+          if(!navigator.onLine)throw new Error('Prepare o modo offline com internet neste iPhone antes de abrir o aplicativo sem conexão.');
         }
-      } catch (error) {
-        if (active) setAuthError(error.message);
-      } finally {
-        if (active) setAuthLoading(false);
-      }
+        if (!authClient) throw new Error('Configure VITE_NEON_AUTH_URL em apps/web/.env para ativar o acesso.');
+        if(await offlineLogoutPending()){const result=await authClient.signOut();if(result?.error)throw new Error('Não foi possível concluir a saída anterior. Tente novamente com conexão.');await clearOfflineLogout();}
+        const result=await readAuthSessionWithRetry();
+        if(result.data?.session&&result.data?.user){
+          const verifiedUser=await verifyApiSession(result);
+          if(active){setUser(verifiedUser);setCompanyName(verifiedUser.company?.name||'');}
+        }else if(!navigator.onLine||!(await apiReachable()))await restoreOffline();
+      } catch(error) {
+        if(!navigator.onLine||!(await apiReachable())){
+          try{if(await restoreOffline())return;}catch(offlineError){if(active)setAuthError(offlineError.message);}
+        }
+        if(active)setAuthError(error.message);
+      } finally {if(active)setAuthLoading(false);}
     }
     restoreSession();
     return () => { active = false; };
