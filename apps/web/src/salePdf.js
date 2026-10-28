@@ -28,17 +28,21 @@ export async function createSalePdf(sale,company,{logo:providedLogo}={}) {
     y+=height;
   }
   room(26);y=drawPdfSection(doc,y,'Produtos e serviços','',palette);
-  const columns=[{label:'Descrição',x:margin+4},{label:'Qtd./un.',x:123,align:'right'},{label:'Preço',x:153,align:'right'},{label:'Total',x:right-4,align:'right'}];
+  const columns=[{label:'Produto / serviço',x:margin+4},{label:'Qtd./un.',x:123,align:'right'},{label:'Preço',x:153,align:'right'},{label:'Total',x:right-4,align:'right'}];
   const tableHeader=()=>{y=drawPdfTableHeader(doc,y,columns,palette);};tableHeader();
   for(const item of sale.items||[]){
-    doc.setFont('helvetica','normal');doc.setFontSize(9);
-    const lines=doc.splitTextToSize([item.name,item.description].filter(Boolean).join(' — '),78);
+    doc.setFontSize(9);doc.setFont('helvetica','bold');
+    const nameLines=doc.splitTextToSize(String(item.name||'Item'),78);
+    doc.setFont('helvetica','normal');doc.setFontSize(8);
+    const detailLines=item.description?doc.splitTextToSize(String(item.description),78):[];
+    const lines=[...nameLines.map(value=>({value,bold:true})),...detailLines.map(value=>({value,bold:false}))];
     let first=true;
     while(lines.length){
       if(y+14>contentBottom){newPage();tableHeader();}
-      const count=Math.max(1,Math.floor((contentBottom-y-8)/4.5)),part=lines.splice(0,count),height=Math.max(10,part.length*4.5+5);
-      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...palette.ink);doc.text(part,margin+4,y+3.5);
-      if(first){doc.text(`${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(Number(item.quantity))} ${item.unit||''}`,123,y+3.5,{align:'right'});doc.text(formatPdfCurrency(item.unit_price),153,y+3.5,{align:'right'});doc.setFont('helvetica','bold');doc.text(formatPdfCurrency(item.line_total),right-4,y+3.5,{align:'right'});}
+      const available=Math.max(1,Math.floor((contentBottom-y-8)/4.5));
+      const part=lines.splice(0,available),height=Math.max(10,part.length*4.5+5);
+      part.forEach((entry,index)=>{doc.setFont('helvetica',entry.bold?'bold':'normal');doc.setFontSize(entry.bold?9:8);doc.setTextColor(...(entry.bold?palette.ink:palette.muted));doc.text(entry.value,margin+4,y+3.5+index*4.5);});
+      if(first){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...palette.ink);doc.text(`${new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(Number(item.quantity))} ${item.unit||''}`,123,y+3.5,{align:'right'});doc.text(formatPdfCurrency(item.unit_price),153,y+3.5,{align:'right'});doc.setFont('helvetica','bold');doc.text(formatPdfCurrency(item.line_total),right-4,y+3.5,{align:'right'});}
       doc.setDrawColor(...palette.line);doc.line(margin,y+height-2,right,y+height-2);y+=height;first=false;
       if(lines.length){newPage();tableHeader();}
     }
