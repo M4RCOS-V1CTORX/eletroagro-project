@@ -1,13 +1,14 @@
 import { decimal, units } from './offlineModel.js';
 import { localToday } from './commercial.js';
-export function offlineExpenses(data, query) {
+export function offlineExpenses(data, query,fixedType='expense') {
   const today = localToday(),
     q = String(query.get('q') || '').trim().toLocaleLowerCase('pt-BR');
   const payments = data.financialPayments || [];
-  const rows = data.entries.filter(e => e.entry_type === 'expense').map(entry => {
+  const rows = data.entries.filter(e=>fixedType==='all'||e.entry_type===fixedType).map(entry => {
     const history = payments.filter(p => p.entry_id === entry.id).sort((a, b) => String(b.paid_at).localeCompare(String(a.paid_at)));
     return {
       ...entry,
+      customer_name:data.customers?.find(c=>c.id===entry.customer_id)?.name||entry.customer_name,
       supplier_name: data.suppliers.find(s => s.id === entry.supplier_id)?.name || entry.supplier_name,
       amount_paid: entry.amount_paid || '0.00',
       balance: decimal(units(entry.amount) - units(entry.amount_paid || '0')),
@@ -22,7 +23,7 @@ export function offlineExpenses(data, query) {
     const statusMatches = status === 'all' || (status === 'overdue' ? e.overdue : e.status === status);
     const date = String(e.due_date || e.competence_date).slice(0, 10),
       matches = (key, value) => !query.get(key) || query.get(key) === 'all' || query.get(key) === value;
-    return (!q || `${e.title} ${e.supplier_name || ''}`.toLocaleLowerCase('pt-BR').includes(q)) && matches('activity', e.business_activity) && matches('category', e.expense_category || 'Sem categoria') && statusMatches && (!query.get('paymentMethod') || query.get('paymentMethod') === 'all' || e.payments.some(p => p.payment_method === query.get('paymentMethod'))) && (!query.get('from') || date >= query.get('from')) && (!query.get('to') || date <= query.get('to'));
+    return (!q || `${e.title} ${e.supplier_name || ''} ${e.customer_name||''}`.toLocaleLowerCase('pt-BR').includes(q)) &&matches('type',e.entry_type)&& matches('activity', e.business_activity) && matches('category', e.expense_category || 'Sem categoria') && statusMatches && (!query.get('paymentMethod') || query.get('paymentMethod') === 'all' || e.payments.some(p => p.payment_method === query.get('paymentMethod'))) && (!query.get('from') || date >= query.get('from')) && (!query.get('to') || date <= query.get('to'));
   });
   const sum = (selector, field) => decimal(filtered.filter(selector).reduce((n, e) => n + units(e[field] || '0'), 0n));
   const summary = {
@@ -30,7 +31,8 @@ export function offlineExpenses(data, query) {
     total: sum(e => e.status !== 'cancelled', 'amount'),
     paid: sum(e => e.status !== 'cancelled', 'amount_paid'),
     pending: sum(e => e.status === 'pending', 'balance'),
-    overdue: sum(e => e.overdue, 'balance')
+    overdue: sum(e => e.overdue, 'balance'),
+    payable:sum(e=>e.status==='pending'&&e.entry_type==='expense','balance'),receivable:sum(e=>e.status==='pending'&&e.entry_type==='income','balance')
   };
   const key = query.get('sort') || 'due_date',
     direction = query.get('order') === 'desc' ? -1 : 1;

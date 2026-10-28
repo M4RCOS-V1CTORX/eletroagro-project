@@ -100,6 +100,7 @@ export async function createQuotePdf(quote, company) {
   fill(colors.blue); doc.roundedRect(page.margin + 31, 40.3, 8, 1.4, 0.7, 0.7, 'F');
 
   y = 52;
+  if(company?.address){doc.setFont('helvetica','normal');doc.setFontSize(8);setText(colors.muted);const lines=doc.splitTextToSize(String(company.address),page.width-page.margin*2);doc.text(lines,page.margin,y);y+=lines.length*3.3+6;}
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(colors.green); doc.text('PROPOSTA COMERCIAL', page.margin, y);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); setText(colors.muted); doc.text('Soluções pensadas para atender ao seu projeto.', page.margin, y + 5);
   y += 12;
@@ -405,6 +406,7 @@ export default function QuotesPage() {
   async function downloadQuotePdf(quote) {
     setBusy(true); setError('');
     try {
+      await apiRequest('/api/company/authorize?module=quotes&action=export');
       const result = await apiRequest(`/api/quotes/${quote.id}`);
       const { doc, filename } = await createQuotePdf(result.quote, companyInfo);
       await savePdfToDevice(doc,filename); setNotice(`PDF do orçamento nº ${String(quote.quote_number).padStart(4, '0')} baixado.`);

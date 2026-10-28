@@ -26,12 +26,13 @@ export function FinanceEntryDialog({
   suppliers = [],
   editing = false,
   showExpenseCategory = false,
-  categories = []
+  categories = [],
+  categoryLabel='Categoria da despesa'
 }) {
-  return draft ? <div className="workspace-backdrop" onMouseDown={e => !busy && e.target === e.currentTarget && setDraft(null)}><section className="workspace-modal finance-entry-modal" role="dialog" aria-modal="true"><header><span className="workspace-eyebrow">NOVO REGISTRO</span><h2>{editing ? 'Editar despesa' : draft.entryType === 'income' ? 'Registrar receita' : 'Registrar despesa'}</h2><button onClick={() => setDraft(null)} disabled={busy} aria-label="Fechar"><X /></button></header><form onSubmit={onSubmit}><ActivitySelect value={draft.businessActivity} onChange={value => setDraft({
+  return draft ? <div className="workspace-backdrop" onMouseDown={e => !busy && e.target === e.currentTarget && setDraft(null)}><section className="workspace-modal finance-entry-modal" role="dialog" aria-modal="true"><header><span className="workspace-eyebrow">NOVO REGISTRO</span><h2>{editing ? (draft.entryType==='income'?'Editar conta a receber':'Editar despesa') : draft.entryType === 'income' ? 'Registrar receita' : 'Registrar despesa'}</h2><button onClick={() => setDraft(null)} disabled={busy} aria-label="Fechar"><X /></button></header><form onSubmit={onSubmit}><ActivitySelect context={showExpenseCategory&&draft.entryType==='expense'?'expense':'all'} value={draft.businessActivity} onChange={value => setDraft({
           ...draft,
           businessActivity: value
-        })} />{showExpenseCategory && <ExpenseCategoryField value={draft.expenseCategory} onChange={value => setDraft({
+        })} />{showExpenseCategory && <ExpenseCategoryField label={categoryLabel} value={draft.expenseCategory} onChange={value => setDraft({
           ...draft,
           expenseCategory: value
         })} categories={categories} />}<label>Descrição<input required minLength="2" maxLength="180" value={draft.title} onChange={e => setDraft({

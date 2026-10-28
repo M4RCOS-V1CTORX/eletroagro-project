@@ -124,6 +124,39 @@ try{
   const categoryUpdated=(await expenseRequest('/api/operations/finance/expenses/'+expenseTwo.id+'/category','PATCH',{expenseCategory:'Energia',expectedUpdatedAt:expenseTwo.updated_at})).entry;assert.equal(categoryUpdated.status,'settled');assert.equal(categoryUpdated.amount,'50.00');assert.equal(categoryUpdated.expense_category,'Energia');
   const byCategory=await expenseRequest('/api/operations/finance/expenses?category=Energia&q=QA%20Despesa');assert.equal(byCategory.pagination.total,1);assert.equal(byCategory.summary.paid,'50.00');assert(byCategory.categories.includes('Manutenção'));
   console.log('✓ Despesas: filtros combinados, indicadores exatos, paginação, detalhes, edição, concorrência, cancelamento e permissões.');
+  for(const module of ['sales','expenses','payables','receivables','purchases','cashflow','stock','quotes']){
+    const report=await call(`/api/completion/reports/category?module=${module}&from=2026-01-01&to=2027-12-31`);
+    assert.equal(report.module,module);assert.equal(report.summary.count,report.rows.length);
+  }
+  const accountList=await call('/api/operations/finance/accounts?type=income');assert(accountList.entries.every(e=>e.entry_type==='income'));
+  console.log('✓ Relatórios categorizados executam SQL real; contas a receber não misturam despesas.');
+  const {normalizePolicy}=await import('../shared/access-policy.js');
+  const viewOnly=normalizePolicy({modules:{sales:{view:true}}});
+  await db.query("INSERT INTO public.company_memberships(company_id,auth_issuer,auth_subject,role,permissions)VALUES($1,'test','view-only','member',$2::jsonb)",[company,JSON.stringify(viewOnly)]);
+  await call('/api/sales',null,200,{'x-test-user':'view-only'});
+  await call('/api/sales',draft,403,{'x-test-user':'view-only'});
+  await call('/api/operations/stock',null,403,{'x-test-user':'view-only'});
+  await call('/api/company/admin/users',null,403,{'x-test-user':'view-only'});
+  const scoped=(await call('/api/offline/snapshot',null,200,{'x-test-user':'view-only'})).snapshot;
+  assert.equal(scoped.purchases.length,0);assert.equal(scoped.orders.length,0);assert.equal(scoped.activity.length,0);
+  await db.query("UPDATE public.company_memberships SET is_active=false WHERE auth_subject='view-only'");
+  await call('/api/sales',null,409,{'x-test-user':'view-only'});
+  console.log('✓ Consulta isolada não permite criar vendas, consultar estoque ou administrar usuários; suspensão impede acesso.');
+  const december=await call('/api/operations/finance?from=2026-12-01&to=2026-12-31');
+  const expectedCash=(await db.query("SELECT COALESCE(SUM(p.amount),0)::text AS total FROM public.financial_payments p JOIN public.financial_entries e ON e.company_id=p.company_id AND e.id=p.entry_id WHERE p.company_id=$1 AND e.entry_type='income' AND p.paid_at BETWEEN '2026-12-01' AND '2026-12-31'",[company])).rows[0].total;
+  assert.equal(Number(december.summary.income),Number(expectedCash));
+  const appointment=(await call('/api/operations/appointments',{title:'Revisão da agenda',startsAt:'2027-02-01T12:00:00Z',endsAt:'2027-02-01T13:00:00Z',category:'Visita',priority:'high'},201)).appointment;
+  const editedResponse=await fetch(base+`/api/operations/appointments/${appointment.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'Visita confirmada'})});assert.equal(editedResponse.status,200);assert.equal((await editedResponse.json()).appointment.title,'Visita confirmada');
+  const deletedResponse=await fetch(base+`/api/operations/appointments/${appointment.id}`,{method:'DELETE'});assert.equal(deletedResponse.status,200);
+  assert(!(await call('/api/operations/appointments?from=2027-02-01&to=2027-02-01')).appointments.some(a=>a.id===appointment.id));
+  assert((await db.query('SELECT deleted_at FROM public.appointments WHERE id=$1',[appointment.id])).rows[0].deleted_at);
+  console.log('✓ Caixa considera pagamentos com vencimentos em outro mês; agenda edita e exclui preservando histórico.');
+  const sharedProfile=(await call('/api/company/admin/profiles',{name:'Consulta controlada',permissions:viewOnly},201)).profile;
+  await db.query("UPDATE public.company_memberships SET is_active=true,access_profile_id=$1 WHERE auth_subject='view-only'",[sharedProfile.id]);
+  await call('/api/sales',null,200,{'x-test-user':'view-only'});
+  const profileEdit=await fetch(base+`/api/company/admin/profiles/${sharedProfile.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:sharedProfile.name,confirmation:sharedProfile.name,expectedUpdatedAt:sharedProfile.updated_at,permissions:normalizePolicy({})})});assert.equal(profileEdit.status,200);
+  await call('/api/sales',null,403,{'x-test-user':'view-only'});
+  console.log('✓ Perfil compartilhado altera a permissão efetiva imediatamente; revogação bloqueia a próxima requisição.');
   app.use('/api/suppliers',createSuppliersRouter(deps));
   if(process.argv.includes('--serve')){
     const webRequire=createRequire(new URL('../apps/web/package.json',import.meta.url));

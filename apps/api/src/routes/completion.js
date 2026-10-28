@@ -1,3 +1,5 @@
+import {canAction} from '../../../../shared/access-policy.js';
+import {createCategoryReportsRouter} from './category-reports.js';
 import { validateAttachment } from '../lib/attachments.js';
 import { Router } from 'express';
 import { idempotencyGuard, requireCompanyMembership } from '../middleware/neon-auth.js';
@@ -39,6 +41,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
     return response.status(403).json({ error: { code: 'AREA_FORBIDDEN', message: 'Seu acesso não permite usar esta área.' } });
   });
 
+  router.use('/reports/category',createCategoryReportsRouter({pool,validDate}));
   router.get('/reports', async (request, response) => {
     if (request.company.role !== 'owner' && request.company.permissions?.reports === false) {
       return response.status(403).json({ error: { code: 'REPORTS_FORBIDDEN', message: 'Seu acesso não permite consultar relatórios.' } });
@@ -58,8 +61,8 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
           (SELECT COUNT(*)::int FROM public.service_orders WHERE company_id=$1 AND status='completed' AND completed_at::date BETWEEN $2 AND $3) AS completed_orders`, [companyId, from, to]),
         pool.query(`WITH months AS (SELECT generate_series(date_trunc('month',$2::date),date_trunc('month',$3::date),'1 month')::date AS month)
           SELECT to_char(m.month,'YYYY-MM') AS month,
-          COALESCE((SELECT SUM(total) FROM public.sales s WHERE s.company_id=$1 AND s.status='completed' AND date_trunc('month',s.sale_date)=m.month),0)::text AS sales,
-          COALESCE((SELECT SUM(p.amount) FROM public.financial_payments p JOIN public.financial_entries f ON f.company_id=p.company_id AND f.id=p.entry_id WHERE p.company_id=$1 AND f.entry_type='income' AND date_trunc('month',p.paid_at)=m.month),0)::text AS income,
+          COALESCE((SELECT SUM(total) FROM public.sales s WHERE s.company_id=$1 AND s.status='completed' AND date_trunc('month',s.sale_date)=m.month AND s.sale_date BETWEEN $2 AND $3),0)::text AS sales,
+          COALESCE((SELECT SUM(p.amount) FROM public.financial_payments p JOIN public.financial_entries f ON f.company_id=p.company_id AND f.id=p.entry_id WHERE p.company_id=$1 AND f.entry_type='income' AND date_trunc('month',p.paid_at)=m.month AND p.paid_at BETWEEN $2 AND $3),0)::text AS income,
           COALESCE((SELECT SUM(p.amount) FROM public.financial_payments p JOIN public.financial_entries f ON f.company_id=p.company_id AND f.id=p.entry_id WHERE p.company_id=$1 AND f.entry_type='expense' AND date_trunc('month',p.paid_at)=m.month),0)::text AS expense
           FROM months m ORDER BY m.month`, [companyId, from, to]),
         pool.query(`SELECT status,COUNT(*)::int AS count,COALESCE(SUM(total),0)::text AS total FROM public.quotes WHERE company_id=$1 AND archived_at IS NULL AND issued_at BETWEEN $2 AND $3 GROUP BY status ORDER BY status`, [companyId, from, to]),
@@ -72,7 +75,11 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
         pool.query(`SELECT customer_name,COUNT(*)::int AS sales_count,SUM(total)::text AS total FROM public.sales WHERE company_id=$1 AND status='completed' AND sale_date BETWEEN $2 AND $3 GROUP BY customer_name ORDER BY SUM(total) DESC LIMIT 10`, [companyId, from, to]),
         pool.query(`SELECT COALESCE(m.display_name,m.email,l.actor_subject) AS actor,COUNT(*)::int AS actions FROM public.audit_logs l LEFT JOIN public.company_memberships m ON m.company_id=l.company_id AND m.auth_subject=l.actor_subject WHERE l.company_id=$1 AND l.created_at::date BETWEEN $2 AND $3 GROUP BY COALESCE(m.display_name,m.email,l.actor_subject) ORDER BY COUNT(*) DESC LIMIT 10`, [companyId, from, to]),
       ]);
-      return response.json({ period: { from, to }, summary: summary.rows[0], monthly: monthly.rows, quoteStatuses: quoteStatuses.rows, orderStatuses: orderStatuses.rows, lowStock: lowStock.rows, topCustomers: topCustomers.rows, activity: activity.rows });
+      const allowed=module=>canAction(request.company,module);
+      const totals={...summary.rows[0]};
+      for(const [module,keys] of Object.entries({sales:['sales'],finance:['income','expense'],quotes:['quotes','approved_quotes'],orders:['completed_orders']}))if(!allowed(module))for(const key of keys)totals[key]=null;
+      const months=monthly.rows.map(row=>({...row,...(!allowed('sales')?{sales:null}:{}),...(!allowed('finance')?{income:null,expense:null}:{})}));
+      return response.json({ period:{from,to},summary:totals,monthly:months,quoteStatuses:allowed('quotes')?quoteStatuses.rows:[],orderStatuses:allowed('orders')?orderStatuses.rows:[],lowStock:allowed('stock')?lowStock.rows:[],topCustomers:allowed('sales')?topCustomers.rows:[],activity:allowed('audit')?activity.rows:[] });
     } catch (error) { return fail(response, error, 'Não foi possível gerar os relatórios.'); }
   });
 
@@ -121,7 +128,7 @@ export function createCompletionRouter({ pool, requireAuth, requireDatabase }) {
   router.get('/receipts/:id', async (request, response) => {
     if (!uuidPattern.test(request.params.id)) return response.status(400).json({ error: { code: 'INVALID_RECEIPT', message: 'Recibo inválido.' } });
     try {
-      const result = await pool.query(`SELECT r.*,c.name AS company_name,c.tax_identifier,c.phone,c.email,c.document_settings
+      const result = await pool.query(`SELECT r.*,c.name AS company_name,c.tax_identifier,c.phone,c.email,c.address,c.document_settings
         FROM public.receipts r JOIN public.companies c ON c.id=r.company_id WHERE r.company_id=$1 AND r.id=$2`, [request.company.company_id, request.params.id]);
       if (!result.rowCount) return response.status(404).json({ error: { code: 'RECEIPT_NOT_FOUND', message: 'Recibo não encontrado.' } });
       return response.json({ receipt: result.rows[0] });

@@ -1,4 +1,5 @@
-export const activityLabels = { unassigned: 'Sem atividade definida', electrical: 'Elétrica', farm: 'Fazenda' };
+export const activityLabels = { unassigned: 'Sem atividade definida', electrical: 'Elétrica', farm: 'Fazenda', supplier: 'Fornecedor', purchase: 'Compra', sale: 'Venda' };
+export const activityOptions = { sale:['unassigned','electrical','farm','supplier'], expense:['unassigned','supplier','farm'], purchase:['unassigned','purchase','sale'], all:Object.keys(activityLabels) };
 export const saleNumber = sale => sale.is_preview ? 'Prévia — sem emissão' : sale.is_provisional?`Provisória OFF-${sale.provisional_reference?.slice(-16)}`:`${String(sale.sale_number).padStart(3,'0')}/${sale.sale_year || String(sale.sale_date).slice(0,4)}`;
 export function localToday() {
   const date=new Date();

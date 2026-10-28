@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from './apiClient.js';
-import { activityLabels, dueFromTerm, saleNumber } from './commercial.js';
+import { activityLabels, activityOptions, dueFromTerm, saleNumber } from './commercial.js';
 const currency=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value||0));
 const date=value=>value?new Intl.DateTimeFormat('pt-BR').format(new Date(`${String(value).slice(0,10)}T12:00:00`)):'—';
 
-export function ActivitySelect({value,onChange,all=false}) {
-  return <label>Atividade<select value={value} onChange={e=>onChange(e.target.value)}>{all&&<option value="all">Todas as atividades</option>}{Object.entries(activityLabels).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>;
+export function ActivitySelect({value,onChange,all=false,context='all'}) {
+  const options=all?activityOptions.all:activityOptions[context]||activityOptions.all;
+  const historical=value&&value!=='all'&&!options.includes(value);
+  return <label>Atividade<select aria-label="Atividade" value={value} onChange={e=>onChange(e.target.value)}>{all&&<option value="all">Todas as atividades</option>}{historical&&<option value={value}>{activityLabels[value]||value} (histórico)</option>}{options.map(id=><option key={id} value={id}>{activityLabels[id]}</option>)}</select></label>;
 }
 
 export function SaleExtraFields({draft,setDraft,profiles,setProfiles,busy}) {
@@ -14,7 +16,7 @@ export function SaleExtraFields({draft,setDraft,profiles,setProfiles,busy}) {
   async function saveProfile(){setSaving(true);setMessage('');try{const r=await apiRequest('/api/sales/transport-profiles',{method:'POST',body:JSON.stringify({vehicle:draft.vehicle,plate:draft.plate,driver:draft.driver})});setProfiles(current=>[...current.filter(p=>p.id!==r.profile.id),r.profile]);setSelected(r.profile.id);setMessage('Transporte salvo para as próximas vendas.');}catch(e){setMessage(e.message);}finally{setSaving(false);}}
   async function removeProfile(){if(!selected||!window.confirm('Remover este transporte da lista? As vendas anteriores serão preservadas.'))return;setSaving(true);try{await apiRequest(`/api/sales/transport-profiles/${selected}`,{method:'DELETE'});setProfiles(current=>current.filter(p=>p.id!==selected));setSelected('');setMessage('Transporte removido da lista.');}catch(e){setMessage(e.message);}finally{setSaving(false);}}
   return <fieldset className="sale-extra-fields field-wide" disabled={busy||saving}><legend>Atividade e transporte</legend>
-    <ActivitySelect value={draft.businessActivity} onChange={value=>setDraft({...draft,businessActivity:value})}/>
+    <ActivitySelect context="sale" value={draft.businessActivity} onChange={value=>setDraft({...draft,businessActivity:value})}/>
     <label>Transporte salvo<select value={selected} onChange={e=>{setSelected(e.target.value);const p=profiles.find(p=>p.id===e.target.value);setDraft({...draft,vehicle:p?.vehicle||'',plate:p?.plate||'',driver:p?.driver||''});}}><option value="">Informar transporte avulso</option>{profiles.map(p=><option key={p.id} value={p.id}>{p.vehicle} · {p.plate||'Sem placa'} · {p.driver||'Sem motorista'}</option>)}</select></label>
     {field('vehicle','Veículo',120)}{field('plate','Placa',12)}{field('driver','Motorista',120)}{field('destination','Destino',200)}
     <div className="sale-inline-actions field-wide"><button type="button" className="customers-secondary" disabled={saving||!draft.vehicle?.trim()} onClick={saveProfile}>{saving?'Salvando…':'Salvar transporte para reutilizar'}</button>{selected&&<button type="button" className="customers-secondary" onClick={removeProfile}>Remover transporte salvo</button>}</div>

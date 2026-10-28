@@ -1,3 +1,5 @@
+import {canAction,normalizePolicy,emptyPolicy,legacyToPolicy} from '../../../../shared/access-policy.js';
+import {createAdministrationRouter} from './administration.js';
 import { Router } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { requireCompanyMembership, requireDatabase } from '../middleware/neon-auth.js';
@@ -6,7 +8,7 @@ import { sendInvitationEmail } from '../services/invitation-email.js';
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const permissionKeys = ['commercial', 'operations', 'finance', 'reports', 'audit'];
 const defaultPermissions = Object.fromEntries(permissionKeys.map((key) => [key, true]));
-function normalizePermissions(input) { return Object.fromEntries(permissionKeys.map((key) => [key, input?.[key] !== false])); }
+function normalizePermissions(input) { if(input?.version===2)return normalizePolicy(input);return Object.fromEntries(permissionKeys.map((key) => [key, input?.[key] !== false])); }
 export const companyTestHelpers = { normalizePermissions, permissionKeys };
 
 export function createCompaniesRouter({ pool, requireAuth }) {
@@ -17,15 +19,16 @@ export function createCompaniesRouter({ pool, requireAuth }) {
     try {
       await pool.query(
         `UPDATE public.company_memberships SET
-           email = COALESCE(NULLIF($3,''), email), display_name = COALESCE(NULLIF($4,''), display_name), updated_at = now()
+           email = COALESCE(NULLIF($3,''), email), display_name = COALESCE(display_name,NULLIF($4,'')), last_access_at = now()
          WHERE auth_issuer = $1 AND auth_subject = $2 AND is_active`,
         [request.auth.issuer, request.auth.subject, request.auth.email || '', request.auth.name || ''],
       );
       const result = await pool.query(
-        `SELECT c.id, c.name, c.tax_identifier, c.phone, c.email, c.document_settings, m.role, m.permissions, m.email AS member_email,
+        `SELECT c.id, c.name, c.tax_identifier, c.phone, c.email, to_jsonb(c)->>'address' AS address, c.document_settings, m.role, COALESCE(ap.permissions,m.permissions) AS permissions, m.email AS member_email,
                 m.display_name AS member_name
          FROM public.company_memberships m
          JOIN public.companies c ON c.id = m.company_id
+         LEFT JOIN public.company_access_profiles ap ON ap.company_id=m.company_id AND ap.id=m.access_profile_id
          WHERE m.auth_issuer = $1 AND m.auth_subject = $2
            AND m.is_active AND c.archived_at IS NULL
          ORDER BY m.created_at ASC
@@ -39,8 +42,10 @@ export function createCompaniesRouter({ pool, requireAuth }) {
     }
   });
 
+  router.use('/admin',requireCompanyMembership(pool),createAdministrationRouter({pool}));
+  router.get('/authorize',requireCompanyMembership(pool),(req,res)=>{if(!canAction(req.company,req.query.module,req.query.action||'export'))return res.status(403).json({error:{code:'EXPORT_FORBIDDEN',message:'Seu perfil não permite esta ação.'}});return res.json({authorized:true});});
   router.get('/access', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode gerenciar acessos.' } });
+    if (!canAction(request.company,'users',request.path.includes('permissions')?'administer':request.path.includes('invitations')?'create':'view')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode gerenciar acessos.' } });
     try {
       const [members, invitations] = await Promise.all([
         pool.query(`SELECT id, email, display_name, role, is_active, permissions, created_at FROM public.company_memberships WHERE company_id=$1 ORDER BY role DESC, created_at`, [request.company.company_id]),
@@ -54,7 +59,7 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.patch('/access/members/:id', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode alterar acessos.' } });
+    if (!canAction(request.company,'users','edit')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode alterar acessos.' } });
     const active = request.body?.active;
     if (!uuidPattern.test(request.params.id) || typeof active !== 'boolean' || request.params.id === request.company.membership_id) return response.status(400).json({ error: { code: 'INVALID_MEMBERSHIP_CHANGE', message: 'Selecione uma pessoa da equipe e uma situação válida.' } });
     try {
@@ -71,11 +76,11 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.patch('/access/members/:id/permissions', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode alterar permissões.' } });
+    if (!canAction(request.company,'users','administer')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode alterar permissões.' } });
     if (!uuidPattern.test(request.params.id) || request.params.id === request.company.membership_id) return response.status(400).json({ error: { code: 'INVALID_MEMBER', message: 'Selecione um membro válido.' } });
     const permissions = normalizePermissions(request.body?.permissions);
     try {
-      const result = await pool.query(`UPDATE public.company_memberships SET permissions=$3::jsonb,updated_at=now() WHERE company_id=$1 AND id=$2 AND role='member' RETURNING id,email,display_name,is_active,permissions`, [request.company.company_id, request.params.id, JSON.stringify(permissions)]);
+      const result = await pool.query(`UPDATE public.company_memberships SET permissions=$3::jsonb,access_profile_id=NULL,updated_at=now() WHERE company_id=$1 AND id=$2 AND role='member' RETURNING id,email,display_name,is_active,permissions`, [request.company.company_id, request.params.id, JSON.stringify(permissions)]);
       if (!result.rowCount) return response.status(404).json({ error: { code: 'MEMBER_NOT_FOUND', message: 'Membro não encontrado.' } });
       await pool.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary) VALUES($1,$2,'permissions_updated','company_membership',$3,$4::jsonb)`, [request.company.company_id, request.auth.subject, request.params.id, JSON.stringify({ permissions })]);
       return response.json({ member: result.rows[0] });
@@ -83,12 +88,12 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.post('/invitations', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode convidar pessoas.' } });
+    if (!canAction(request.company,'users','create')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode convidar pessoas.' } });
     const email = typeof request.body?.email === 'string' ? request.body.email.trim().toLowerCase() : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return response.status(400).json({ error: { code: 'INVALID_INVITE_EMAIL', message: 'Informe um e-mail válido.' } });
     const code = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(code).digest('hex');
-    const permissions = normalizePermissions(request.body?.permissions);
+    const permissions = request.body?.permissions ? (request.body.permissions.version===2 ? normalizePolicy(request.body.permissions) : legacyToPolicy({role:'member',permissions:request.body.permissions})) : emptyPolicy();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -114,7 +119,7 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.delete('/invitations/:id', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode cancelar convites.' } });
+    if (!canAction(request.company,'users','edit')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode cancelar convites.' } });
     if (!uuidPattern.test(request.params.id)) return response.status(400).json({ error: { code: 'INVALID_INVITATION_ID', message: 'Identificador de convite inválido.' } });
     try {
       const result = await pool.query(`UPDATE public.company_invitations SET revoked_at=now() WHERE company_id=$1 AND id=$2 AND accepted_at IS NULL AND revoked_at IS NULL RETURNING id`, [request.company.company_id,request.params.id]);
@@ -152,8 +157,10 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.patch('/me', requireCompanyMembership(pool), async (request, response) => {
-    if (request.company.role !== 'owner') return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode editar estes dados.' } });
+    if (!canAction(request.company,'company','edit')) return response.status(403).json({ error: { code: 'OWNER_REQUIRED', message: 'Somente o responsável da empresa pode editar estes dados.' } });
     const input = request.body || {};
+    if(input.address!=null&&(typeof input.address!=='string'||input.address.length>500))return response.status(400).json({error:{code:'INVALID_COMPANY_ADDRESS',message:'Informe um endereço com até 500 caracteres.'}});
+    const address=typeof input.address==='string'?input.address.trim():null;
     const name = typeof input.name === 'string' ? input.name.trim() : '';
     const taxIdentifier = typeof input.taxIdentifier === 'string' ? input.taxIdentifier.trim() : '';
     const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
@@ -164,14 +171,14 @@ export function createCompaniesRouter({ pool, requireAuth }) {
     }
     try {
       const result = await pool.query(
-        `UPDATE public.companies SET name = $3, tax_identifier = $4, phone = $5, email = $6, updated_at = now()
+        `UPDATE public.companies SET name = $3, tax_identifier = $4, phone = $5, email = $6, address=CASE WHEN $8 THEN $7 ELSE address END, updated_at = now()
          WHERE id = $1 AND archived_at IS NULL AND EXISTS (
-           SELECT 1 FROM public.company_memberships WHERE id = $2 AND role = 'owner' AND is_active
-         ) RETURNING id, name, tax_identifier, phone, email`,
-        [request.company.company_id, request.company.membership_id, name, taxIdentifier || null, phone || null, email || null],
+           SELECT 1 FROM public.company_memberships WHERE id = $2 AND is_active
+         ) RETURNING id, name, tax_identifier, phone, email, address, document_settings`,
+        [request.company.company_id, request.company.membership_id, name, taxIdentifier || null, phone || null, email || null,address,Object.hasOwn(input,'address')],
       );
       if (!result.rowCount) return response.status(404).json({ error: { code: 'COMPANY_NOT_FOUND', message: 'Empresa não encontrada.' } });
-      return response.json({ company: { ...result.rows[0], role: 'owner' } });
+      return response.json({ company: { ...result.rows[0], role: request.company.role,permissions:request.company.permissions } });
     } catch (error) {
       if (error.code === '23505') return response.status(409).json({ error: { code: 'COMPANY_DOCUMENT_EXISTS', message: 'Já existe uma empresa ativa com esse CPF/CNPJ.' } });
       console.error('Falha ao atualizar empresa:', error.message);
@@ -221,6 +228,7 @@ export function createCompaniesRouter({ pool, requireAuth }) {
       await client.query('DELETE FROM public.catalog_items WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.suppliers WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.company_memberships WHERE company_id = $1', [companyId]);
+      await client.query('DELETE FROM public.company_access_profiles WHERE company_id = $1', [companyId]);
       await client.query('DELETE FROM public.companies WHERE id = $1', [companyId]);
       await client.query('COMMIT');
       return response.json({ deleted: true });

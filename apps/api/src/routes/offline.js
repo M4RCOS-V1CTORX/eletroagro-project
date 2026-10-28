@@ -1,5 +1,6 @@
 import {operationLookups} from '../lib/lookups.js';
 import {Router} from 'express';
+import {canAction} from '../../../../shared/access-policy.js';
 import {requireCompanyMembership} from '../middleware/neon-auth.js';
 
 export function createOfflineRouter({pool,requireAuth,requireDatabase}){
@@ -10,7 +11,7 @@ export function createOfflineRouter({pool,requireAuth,requireDatabase}){
     async function rows(sql,params=[company]){const result=await client.query(sql,params);if(result.rows.length>20000)throw new Error('O volume excedeu o limite de preparação offline. Selecione um conjunto menor antes de continuar.');return result.rows;}
     try{
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const profile=(await rows('SELECT id,name,tax_identifier,phone,email,document_settings FROM public.companies WHERE id=$1'))[0];
+      const profile=(await rows('SELECT id,name,tax_identifier,phone,email,address,document_settings FROM public.companies WHERE id=$1'))[0];
       const data={version:1,preparedAt:new Date().toISOString(),company:{...profile,role:req.company.role,permissions:req.company.permissions},access:Object.fromEntries(['commercial','finance','operations','reports','audit'].map(a=>[a,can(a)]))};
       const group=(rows,key)=>{const result=new Map();for(const row of rows){if(!result.has(row[key]))result.set(row[key],[]);result.get(row[key]).push(row);}return result;};
       const table=async(name,allowed)=>allowed?rows(`SELECT * FROM public.${name} WHERE company_id=$1 LIMIT 20001`):[];
@@ -37,10 +38,20 @@ export function createOfflineRouter({pool,requireAuth,requireDatabase}){
       if(!can('operations')&&can('commercial'))data.stock=await rows(`SELECT c.id,c.code,c.name,c.unit,c.minimum_stock,COUNT(m.id)::int AS movements,COALESCE(SUM(CASE WHEN m.direction='in' THEN m.quantity ELSE -m.quantity END),0)::numeric(12,3)::text AS stock FROM public.catalog_items c LEFT JOIN public.stock_movements m ON m.company_id=c.company_id AND m.catalog_item_id=c.id WHERE c.company_id=$1 AND c.item_type='product' GROUP BY c.id LIMIT 20001`);
       data.movements=can('operations')?await rows('SELECT m.*,c.name AS item_name,c.unit FROM public.stock_movements m JOIN public.catalog_items c ON c.company_id=m.company_id AND c.id=m.catalog_item_id WHERE m.company_id=$1 ORDER BY m.created_at DESC LIMIT 100'):[];
       data.appointments=await table('appointments',can('operations'));
+      data.agendaMembers=canAction(req.company,'agenda')?await rows("SELECT id,COALESCE(display_name,email,'Usuário') AS name FROM public.company_memberships WHERE company_id=$1 AND is_active"):[];
       data.orders=await table('service_orders',can('operations'));const orderItems=await table('service_order_items',can('operations'));
       const itemsByOrder=group(orderItems,'order_id');for(const order of data.orders)order.items=itemsByOrder.get(order.id)||[];
       data.attachments=can('operations')?await rows('SELECT id,service_order_id,file_name,mime_type,byte_size,caption,created_at FROM public.service_order_attachments WHERE company_id=$1 LIMIT 20001'):[];
       data.activity=can('audit')?await rows('SELECT * FROM public.audit_logs WHERE company_id=$1 ORDER BY created_at DESC LIMIT 50'):[];
+      if(req.company.permissions?.version===2){
+        const view=module=>canAction(req.company,module,'view');
+        for(const [key,module] of Object.entries({customers:'customers',catalog:'catalog',suppliers:'suppliers',sales:'sales',quotes:'quotes',transportProfiles:'sales',receipts:'receipts',purchases:'purchases',movements:'stock',appointments:'agenda',orders:'orders',attachments:'orders',activity:'audit'}))if(!view(module))data[key]=[];
+        data.entries=data.entries.filter(entry=>view('finance')||entry.entry_type==='income'&&(view('receivables')||entry.source_type==='sale'&&view('sales'))||entry.entry_type==='expense'&&(view('payables')||view('expenses')));
+        const entryIds=new Set(data.entries.map(entry=>entry.id));data.financialPayments=data.financialPayments.filter(payment=>entryIds.has(payment.entry_id));
+        if(!view('stock')&&!view('sales')&&!view('purchases'))data.stock=[];
+        if(!canAction(req.company,'catalog','costs'))data.catalog=data.catalog.map(({cost_price,...item})=>item);
+        if(!canAction(req.company,'stock','costs'))data.movements=data.movements.map(({unit_cost,...movement})=>movement);
+      }
       await client.query('COMMIT');res.set('Cache-Control','no-store');return res.json({snapshot:data});
     }catch(error){await client.query('ROLLBACK').catch(()=>{});console.error('Falha ao preparar offline:',error.message);return res.status(503).json({error:{code:'OFFLINE_PREPARATION_FAILED',message:'Não foi possível preparar os dados offline. Nenhum dado local anterior foi substituído.'}});}
     finally{client.release();}

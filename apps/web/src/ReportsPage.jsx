@@ -1,4 +1,5 @@
 import {localToday} from './commercial.js';
+import CategoryReports from './CategoryReports.jsx';
 import {csvRows} from './csv.js';
 import { useEffect, useMemo, useState } from 'react';
 import { BarChart3, CalendarRange, Download, FileDown, LoaderCircle, TrendingUp } from 'lucide-react';
@@ -31,13 +32,14 @@ export default function ReportsPage() {
   const result = Number(data?.summary?.income || 0) - Number(data?.summary?.expense || 0);
   const approvalRate = Number(data?.summary?.quotes) ? (Number(data.summary.approved_quotes) / Number(data.summary.quotes)) * 100 : 0;
 
-  function exportCsv() {
+  async function exportCsv() {
+    try{await apiRequest('/api/company/authorize?module=reports&action=export');}catch(e){setError(e.message);return;}
     const rows = [['Mês', 'Vendas', 'Receitas', 'Despesas'], ...(data?.monthly || []).map((row) => [row.month, row.sales, row.income, row.expense])];
     const blob = new Blob([csvRows(rows)], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `relatorio-${range.from}-${range.to}.csv`; link.click(); URL.revokeObjectURL(link.href);
   }
   async function exportPdf() {
-    if(pdfBusy)return;setPdfBusy(true);setError('');try{
+    if(pdfBusy)return;setPdfBusy(true);setError('');try{await apiRequest('/api/company/authorize?module=reports&action=export');
     const doc = new jsPDF({ unit: 'mm', format: 'a4' }); const palette = createPdfPalette(company); const logo = await loadPdfLogo();
     const pageWidth = PDF_PAGE.width; const pageHeight = PDF_PAGE.height; const margin = PDF_PAGE.margin;
     const period = `${range.from.split('-').reverse().join('/')} a ${range.to.split('-').reverse().join('/')}`;
@@ -78,6 +80,7 @@ export default function ReportsPage() {
     <header className="workspace-heading workspace-heading-green"><div><span className="workspace-eyebrow">INTELIGÊNCIA DO NEGÓCIO</span><h1>Relatórios e indicadores</h1><p>Analise vendas, resultado financeiro, serviços, estoque e atividade da equipe.</p></div><div className="workspace-heading-actions"><button className="workspace-button subtle" disabled={!data} onClick={exportCsv}><Download size={16}/> CSV</button><button className="workspace-button primary" disabled={!data||pdfBusy} onClick={exportPdf}><FileDown size={16}/> PDF</button></div></header>
     <div className="reports-filter"><CalendarRange size={18}/><label>De<input type="date" value={range.from} max={range.to} onChange={(event) => setRange({ ...range, from: event.target.value })}/></label><label>Até<input type="date" value={range.to} min={range.from} max={today()} onChange={(event) => setRange({ ...range, to: event.target.value })}/></label><button className="workspace-button primary" onClick={load} disabled={loading}>{loading ? 'Atualizando…' : 'Aplicar período'}</button></div>
     {error && <div className="workspace-message is-error" role="alert">{error}<button onClick={load}>Tentar novamente</button></div>}
+    <CategoryReports company={company} range={range}/>
     {loading && !data ? <div className="reports-loading"><LoaderCircle className="spin"/>Gerando indicadores…</div> : data && <>
       <div className="reports-metrics">{[
         ['Vendas', brl.format(Number(data.summary.sales)), 'blue'], ['Receitas', brl.format(Number(data.summary.income)), 'green'], ['Despesas', brl.format(Number(data.summary.expense)), 'yellow'], ['Resultado', brl.format(result), result >= 0 ? 'green' : 'red'], ['Aprovação', `${approvalRate.toFixed(1)}%`, 'blue'], ['Serviços concluídos', data.summary.completed_orders, 'green'],

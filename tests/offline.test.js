@@ -4,6 +4,16 @@ import {applyOfflineCommand,units} from '../apps/web/src/offlineModel.js';
 import {readOffline} from '../apps/web/src/offlineRead.js';
 import {createOfflineQueue,queueScope,canQueue} from '../apps/web/src/offlineQueue.js';
 import {validateAttachment} from '../apps/api/src/lib/attachments.js';
+import {normalizePolicy} from '../shared/access-policy.js';
+
+test('permissões individuais impedem criação e recebimento offline sem autorização',()=>{
+  const base=offlineFixture();base.company.role='member';base.company.permissions=normalizePolicy({modules:{sales:{view:true}}});
+  assert.throws(()=>applyOfflineCommand(base,cmd('/api/sales',saleBody)),/perfil/);
+  base.company.permissions=normalizePolicy({modules:{sales:{view:true,create:true}}});
+  assert.throws(()=>applyOfflineCommand(base,cmd('/api/sales',saleBody)),/recebimentos/);
+  const created=applyOfflineCommand(base,cmd('/api/sales',{...saleBody,amountPaid:'0'}));assert.equal(created.result.sale.amount_paid,'0.00');
+  assert.equal(base.sales.length,0);
+});
 
 export function offlineFixture(){return{version:1,preparedAt:'2026-10-26T12:00:00Z',company:{id:'company',name:'Empresa de teste',document_settings:{}},access:{commercial:true,finance:true,operations:true,audit:true},customers:[{id:'customer',name:'Cliente de teste',payment_term_days:8}],catalog:[{id:'product',name:'Banana de teste',item_type:'product',unit:'kg',is_active:true,minimum_stock:'1.000'}],suppliers:[],sales:[],quotes:[],transportProfiles:[],entries:[],financialPayments:[],receipts:[],purchases:[],stock:[{id:'product',name:'Banana de teste',unit:'kg',minimum_stock:'1.000',stock:'100.000',movements:1}],movements:[],appointments:[],orders:[],attachments:[],activity:[]};}
 const cmd=(path,payload,method='POST')=>({id:crypto.randomUUID(),createdAt:Date.now(),path,method,payload,localIds:{}});

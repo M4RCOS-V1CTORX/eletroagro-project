@@ -1,6 +1,7 @@
+import {canAction} from '../../../shared/access-policy.js';
 import ModuleBoundary from './ModuleBoundary.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Package, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Banknote, Package, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 import OfflineTools from './OfflineTools.jsx';
@@ -14,6 +15,7 @@ const SuppliersPage = lazy(() => import('./SuppliersPage.jsx'));
 const SalesPage = lazy(() => import('./SalesPage.jsx'));
 const OverviewPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.OverviewPage })));
 const FinancePage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.FinancePage })));
+const AccountsPage=lazy(()=>import('./AccountsPage.jsx'));
 const ExpensesPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.ExpensesPage })));
 const AgendaPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AgendaPage })));
 const StockPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.StockPage })));
@@ -31,6 +33,7 @@ const navigation = [
   { label: 'Vendas', icon: CircleDollarSign, key: 'sales' },
   { label: 'Despesas', icon: ReceiptText, key: 'expenses' },
   { label: 'Estoque', icon: Package, key: 'stock' },
+  { label: 'Contas a pagar e a receber', icon: Banknote, key: 'accounts' },
   { label: 'Financeiro', icon: ChartNoAxesCombined, key: 'finance' },
   { label: 'Recibos', icon: ReceiptText, key: 'receipts' },
   { label: 'Relatórios', icon: FileBarChart, key: 'reports' },
@@ -42,13 +45,13 @@ const desktopNavigationGroups = [
   { label: 'PAINEL', keys: ['overview'] },
   { label: 'COMERCIAL', keys: ['customers', 'catalog', 'suppliers', 'quotes', 'sales'] },
   { label: 'OPERAÇÃO', keys: ['expenses', 'stock', 'agenda'] },
-  { label: 'GESTÃO', keys: ['finance', 'receipts', 'reports', 'audit'] },
+  { label: 'GESTÃO', keys: ['accounts','finance', 'receipts', 'reports', 'audit'] },
 ];
 
-const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', expenses: 'Despesas', stock: 'Estoque', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
+const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', expenses: 'Despesas', stock: 'Estoque', accounts:'Contas a pagar e a receber', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
 const mobilePrimaryKeys = ['overview', 'customers', 'quotes', 'sales'];
 const mobileMoreGroups = [
-  { label: 'Operação', keys: ['expenses', 'stock', 'finance', 'agenda'] },
+  { label: 'Operação', keys: ['expenses', 'accounts', 'stock', 'finance', 'agenda'] },
   { label: 'Cadastros', keys: ['catalog', 'suppliers'] },
   { label: 'Gestão', keys: ['receipts', 'reports', 'audit', 'settings'] },
 ];
@@ -186,10 +189,12 @@ export default function App() {
         if (!response.ok) throw new Error('API indisponível');
         const health = await response.json();
         setApiStatus('online');
+        if(import.meta.env.DEV)console.info('[EletroAgro] Verificação de disponibilidade concluída.');
         setDatabaseStatus(health.database === 'configured' ? 'configured' : 'not_configured');
       } catch (error) {
         if (error.name !== 'AbortError') {
           setApiStatus('offline');
+          console.warn('[EletroAgro] Serviço indisponível na verificação de disponibilidade.');
           setDatabaseStatus('unknown');
         }
       }
@@ -304,10 +309,10 @@ export default function App() {
   if (!user) return <AuthScreen view={authView} isSignUp={isSignUp} onToggleMode={(nextMode) => { setAuthView('access'); setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onForgot={() => { setAuthView('forgot'); setAuthError(''); setAuthNotice(''); }} onBack={() => { setAuthView('access'); setIsSignUp(false); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} onRecovery={handlePasswordRecovery} onReset={handlePasswordReset} busy={authBusy} error={authError} notice={authNotice} />;
   if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
-  const apiLabel = apiStatus === 'online' ? 'API conectada' : apiStatus === 'checking' ? 'Verificando API' : 'API desconectada';
-  const ApiIcon = apiStatus === 'online' ? Wifi : WifiOff;
-  const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', expenses: 'finance', stock: 'operations', agenda: 'operations', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
-  const canUsePage = (key) => user.company?.role === 'owner' || !permissionArea[key] || user.company?.permissions?.[permissionArea[key]] !== false;
+  const syncLabel = !online ? 'Sem conexão' : `${pendingSync} pendente(s)`;
+  const SyncIcon = online ? Wifi : WifiOff;
+  const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', expenses: 'finance', stock: 'operations', agenda: 'operations', accounts:'finance', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
+  const canUsePage = key => key==='accounts' ? ['payables','receivables','finance'].some(m=>canAction(user.company,m)) : key==='settings' ? ['company','users'].some(m=>canAction(user.company,m)) : canAction(user.company,key==='overview'?'dashboard':key);
   async function installApplication() { if (!installPrompt) return; await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null); }
 
   return (
@@ -338,11 +343,11 @@ export default function App() {
       <main className="main-content" id="inicio">
         <header className="topbar">
           <div className="breadcrumbs">Início <span>/</span> <b>{pageLabels[page] || 'Visão geral'}</b></div>
-          <div className="topbar-tools">{installPrompt && <button className="topbar-install" onClick={installApplication}><Download size={15}/>Instalar</button>}{reminderCount > 0 && <button className="topbar-reminders" onClick={() => setPage('agenda')} title="Compromissos próximos"><Bell size={15}/><b>{reminderCount}</b></button>}<div className={`connection ${online && apiStatus === 'online' ? 'connected' : ''}`}><ApiIcon size={15} />{!online ? 'Sem conexão' : pendingSync ? `${pendingSync} pendente(s)` : apiLabel}<i /></div></div>
+          <div className="topbar-tools">{installPrompt && <button className="topbar-install" onClick={installApplication}><Download size={15}/>Instalar</button>}{reminderCount > 0 && <button className="topbar-reminders" onClick={() => setPage('agenda')} title="Compromissos próximos"><Bell size={15}/><b>{reminderCount}</b></button>}{(!online || pendingSync > 0) && <div className={`connection ${online ? 'connected' : ''}`}><SyncIcon size={15} />{syncLabel}<i /></div>}</div>
         </header>
         <OfflineTools/>
         <ModuleBoundary page={page}><Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
-          {page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'expenses' ? <ExpensesPage /> : page === 'stock' ? <StockPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
+          {!canUsePage(page)?<section className="workspace-page"><h1>Acesso restrito</h1><p>Seu perfil não permite acessar esta tela. Selecione uma opção disponível no menu.</p></section>:page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'expenses' ? <ExpensesPage /> : page === 'stock' ? <StockPage /> : page === 'accounts' ? <AccountsPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
         </Suspense></ModuleBoundary>
       </main>
       {mobileMoreOpen && <>

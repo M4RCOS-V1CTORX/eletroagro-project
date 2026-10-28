@@ -1,8 +1,10 @@
-export const activities = new Set(['unassigned', 'electrical', 'farm']);
+export const activities = new Set(['unassigned', 'electrical', 'farm', 'supplier', 'purchase', 'sale']);
+export const saleActivities = new Set(['unassigned', 'electrical', 'farm', 'supplier']);
+export const purchaseActivities = new Set(['unassigned', 'electrical', 'farm', 'purchase', 'sale']);
 
 export function parseSaleExtras(body) {
   const value = { businessActivity: body.businessActivity ?? 'unassigned' };
-  if (!activities.has(value.businessActivity)) return { error: 'Selecione uma atividade válida.' };
+  if (!saleActivities.has(value.businessActivity)) return { error: 'Selecione uma atividade válida.' };
   for (const [key, max] of Object.entries({ vehicle: 120, plate: 12, driver: 120, destination: 200 })) {
     if (body[key] != null && typeof body[key] !== 'string') return { error: 'Confira os dados do transporte.' };
     value[key] = (body[key] || '').trim();

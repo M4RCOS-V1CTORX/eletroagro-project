@@ -158,6 +158,7 @@ export default function SalesPage() {
     if (!details) return;
     setPdfBusy(true); setError('');
     try {
+      await apiRequest('/api/company/authorize?module=sales&action=export');
       const [fresh, company] = await Promise.all([apiRequest(`/api/sales/${details.id}`), apiRequest('/api/company/me')]);
       const { doc, filename } = await createSalePdf(fresh.sale, company.company);
       doc.save(filename); setNotice(`Nota da venda #${saleNumber(details)} baixado.`);
@@ -169,6 +170,7 @@ export default function SalesPage() {
     if (!details) return;
     setPdfBusy(true); setError('');
     try {
+      await apiRequest('/api/company/authorize?module=sales&action=export');
       const [fresh, company] = await Promise.all([apiRequest(`/api/sales/${details.id}`), apiRequest('/api/company/me')]);
       const { doc, filename } = await createSalePdf(fresh.sale, company.company);
       const file = new File([doc.output('blob')], filename, { type: 'application/pdf' });
@@ -181,7 +183,7 @@ export default function SalesPage() {
   async function previewNote() {
     setPdfBusy(true);setError('');
     try {
-      const company=await apiRequest('/api/company/me');
+      await apiRequest('/api/company/authorize?module=sales&action=export');const company=await apiRequest('/api/company/me');
       let sale=details;
       if(draft){
         const customer=customers.find(c=>c.id===draft.customerId);

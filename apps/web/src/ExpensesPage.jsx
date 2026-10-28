@@ -32,9 +32,10 @@ const initialFilters = () => ({
   order: 'asc'
 });
 const editable = entry => entry.source_type === 'manual' && entry.status === 'pending' && Number(entry.amount_paid || 0) === 0 && !['pending', 'failed'].includes(entry.sync_status);
-const statusText = entry => entry.sync_status === 'failed' ? 'Revisar sincronização' : entry.sync_status === 'pending' ? 'Aguardando sincronização' : entry.status === 'cancelled' ? 'Cancelada' : entry.status === 'settled' ? 'Paga' : entry.overdue ? 'Vencida' : Number(entry.amount_paid) > 0 ? 'Pagamento parcial' : 'Pendente';
-export default function ExpensesPage() {
-  const [filters, setFilters] = useState(initialFilters),
+const statusText = entry => entry.sync_status === 'failed' ? 'Revisar sincronização' : entry.sync_status === 'pending' ? 'Aguardando sincronização' : entry.status === 'cancelled' ? 'Cancelada' : entry.status === 'settled' ? (entry.entry_type==='income'?'Recebida':'Paga') : entry.overdue ? 'Vencida' : Number(entry.amount_paid) > 0 ? 'Pagamento parcial' : 'Pendente';
+export default function ExpensesPage({accounts=false}={}) {
+  const basePath=accounts?'/api/operations/finance/accounts':'/api/operations/finance/expenses';
+  const [filters, setFilters] = useState(()=>({...initialFilters(),...(accounts?{type:'all'}:{})})),
     [search, setSearch] = useState(''),
     [offset, setOffset] = useState(0);
   const [data, setData] = useState(null),
@@ -45,6 +46,7 @@ export default function ExpensesPage() {
   const [draft, setDraft] = useState(null),
     [editingId, setEditingId] = useState(null),
     [suppliers, setSuppliers] = useState([]),
+    [customers,setCustomers]=useState([]),
     [payment, setPayment] = useState(null),
     [details, setDetails] = useState(null),
     [classification, setClassification] = useState(null),
@@ -67,7 +69,7 @@ export default function ExpensesPage() {
     setLoading(true);
     setError('');
     try {
-      const result = await apiRequest(`/api/operations/finance/expenses?${new URLSearchParams({
+      const result = await apiRequest(`${basePath}?${new URLSearchParams({
         ...filters,
         limit: '25',
         offset: String(offset)
@@ -112,17 +114,18 @@ export default function ExpensesPage() {
       setBusy(false);
     }
   }
-  const getDetails = async entry => (await apiRequest(`/api/operations/finance/expenses/${entry.id}`)).entry;
+  const getDetails = async entry => (await apiRequest(`${basePath}/${entry.id}`)).entry;
   const openDetails = entry => act(async () => setDetails(await getDetails(entry)));
-  const start = entry => act(async () => {
+  const start = (entry,newType='expense') => act(async () => {
     const lookup = await apiRequest('/api/operations/lookups');
-    setSuppliers(lookup.suppliers || []);
+    setSuppliers(lookup.suppliers || []);setCustomers(lookup.customers||[]);
     if (entry) {
       const current = await getDetails(entry);
       if (!editable(current)) throw new Error('Esta despesa não pode ser editada. Consulte seus pagamentos ou o documento de origem.');
       setEditingId(current.id);
       setDraft({
-        entryType: 'expense',
+        entryType: current.entry_type,
+        customerId:current.customer_id||'',
         title: current.title,
         amount: current.amount,
         competenceDate: String(current.competence_date).slice(0, 10),
@@ -138,13 +141,13 @@ export default function ExpensesPage() {
     } else {
       setEditingId(null);
       setDraft({
-        entryType: 'expense',
+        entryType: newType,
         expenseCategory: '',
         title: '',
         amount: '',
         competenceDate: localToday(),
         dueDate: '',
-        businessActivity: filters.activity === 'all' ? 'unassigned' : filters.activity,
+        businessActivity:['supplier','farm'].includes(filters.activity)?filters.activity:'unassigned',
         supplierId: '',
         customerId: '',
         notes: '',
@@ -160,16 +163,15 @@ export default function ExpensesPage() {
   function save(event) {
     event.preventDefault();
     act(async () => {
-      const result = await apiRequest(editingId ? `/api/operations/finance/expenses/${editingId}` : '/api/operations/finance', {
+      const result = await apiRequest(editingId ? `${basePath}/${editingId}` : '/api/operations/finance', {
         method: editingId ? 'PATCH' : 'POST',
         body: JSON.stringify({
-          ...draft,
-          entryType: 'expense'
+          ...draft
         })
       });
       setDraft(null);
       setEditingId(null);
-      setNotice(result.queued ? result.message : editingId ? 'Despesa atualizada.' : 'Despesa registrada.');
+      setNotice(result.queued?result.message:accounts?'Conta salva.':editingId?'Despesa atualizada.':'Despesa registrada.');
       await load();
     });
   }
@@ -251,39 +253,40 @@ export default function ExpensesPage() {
     if (!busy) set(value);
   };
   return <section className="workspace-page finance-workspace expenses-workspace" aria-busy={loading}>
-    <Heading eyebrow="CONTAS DA OPERAÇÃO" title="Despesas" description="Organize despesas da elétrica e da fazenda, acompanhe vencimentos e registre pagamentos." accent="green" action={<button className="workspace-button primary" disabled={busy} onClick={() => start()}><Plus size={16} />Nova despesa</button>} />
+    <Heading eyebrow="CONTAS DA OPERAÇÃO" title={accounts?'Contas a pagar e a receber':'Despesas'} description={accounts?'Centralize obrigações e recebíveis, com os mesmos lançamentos de vendas, compras e despesas.':'Organize despesas da elétrica e da fazenda, acompanhe vencimentos e registre pagamentos.'} accent="green" action={accounts?<><button className="workspace-button subtle" disabled={busy} onClick={()=>start(null,'expense')}><Plus size={16}/>Conta a pagar</button><button className="workspace-button primary" disabled={busy} onClick={()=>start(null,'income')}><Plus size={16}/>Conta a receber</button></>:<button className="workspace-button primary" disabled={busy} onClick={() => start()}><Plus size={16} />Nova despesa</button>} />
     <Message error={error} notice={notice} clear={() => setNotice('')} />
     {error && <button className="workspace-button subtle" disabled={busy || loading} onClick={load}>Tentar novamente</button>}
-    <section className="expenses-metrics" aria-label="Despesas dos filtros aplicados">
+    {accounts?<section className="expenses-metrics" aria-label="Resumo das contas filtradas"><Metric icon={ArrowUpRight} label="Contas a pagar" value={data?money(summary.payable):'—'} note="Saldo das obrigações" tone="yellow"/><Metric icon={Banknote} label="Contas a receber" value={data?money(summary.receivable):'—'} note="Saldo dos recebíveis" tone="green"/><Metric icon={CircleAlert} label="Total pendente" value={data?money(summary.pending):'—'} note="A pagar mais a receber"/><Metric icon={CircleAlert} label="Total vencido" value={data?money(summary.overdue):'—'} note="Saldo após o vencimento" tone="red"/></section>:<>    <section className="expenses-metrics" aria-label="Despesas dos filtros aplicados">
       <Metric icon={Banknote} label="Total do período" value={data ? money(summary.total) : '—'} note="Despesas não canceladas" />
       <Metric icon={Check} label="Despesas pagas" value={data ? money(summary.paid) : '—'} note="Inclui pagamentos parciais" tone="green" />
       <Metric icon={ArrowUpRight} label="Despesas pendentes" value={data ? money(summary.pending) : '—'} note="Saldo que falta pagar" tone="yellow" />
       <Metric icon={CircleAlert} label="Despesas vencidas" value={data ? money(summary.overdue) : '—'} note="Saldo pendente após o vencimento" tone="red" />
     </section>
+</>}
     <p className="expenses-filter-note">Indicadores consideram todos os resultados dos filtros, antes da paginação. O período usa vencimento ou, quando ausente, competência.</p>
-    <section className="expense-filter-panel" aria-labelledby="expense-filters-title"><header className="expense-panel-heading"><div><span className="expense-section-kicker">ENCONTRE O QUE PRECISA</span><h2 id="expense-filters-title"><SlidersHorizontal size={17}/>Filtros de despesas</h2></div><span className="expense-results-count">{loading?'Atualizando…':`${total} ${total===1?'despesa encontrada':'despesas encontradas'}`}</span></header><div className="finance-toolbar expenses-filters">
+    <section className="expense-filter-panel" aria-labelledby="expense-filters-title"><header className="expense-panel-heading"><div><span className="expense-section-kicker">ENCONTRE O QUE PRECISA</span><h2 id="expense-filters-title"><SlidersHorizontal size={17}/>{accounts?'Filtros de contas':'Filtros de despesas'}</h2></div><span className="expense-results-count">{loading?'Atualizando…':`${total} ${total===1?(accounts?'conta encontrada':'despesa encontrada'):(accounts?'contas encontradas':'despesas encontradas')}`}</span></header><div className="finance-toolbar expenses-filters">
       <form className="workspace-search" onSubmit={event => {
         event.preventDefault();
         filter('q', search.trim());
       }}><Search size={15} /><input aria-label="Pesquisar despesas" placeholder="Descrição ou fornecedor" value={search} onChange={e => setSearch(e.target.value)} /><button>Buscar</button></form>
       <label>De<input type="date" value={filters.from} max={filters.to || undefined} onChange={e => filter('from', e.target.value)} /></label>
       <label>Até<input type="date" value={filters.to} min={filters.from || undefined} onChange={e => filter('to', e.target.value)} /></label>
-      <ActivitySelect all value={filters.activity} onChange={value => filter('activity', value)} />
+      {accounts&&<label>Tipo<select aria-label="Tipo de conta" value={filters.type||'all'} onChange={e=>filter('type',e.target.value)}><option value="all">Todas as contas</option><option value="expense">A pagar</option><option value="income">A receber</option></select></label>}<ActivitySelect all value={filters.activity} onChange={value => filter('activity', value)} />
       <label>Categoria<select aria-label="Categoria" value={filters.category} onChange={e => filter('category', e.target.value)}><option value="all">Todas as categorias</option>{(data?.categories || []).map(name => <option value={name} key={name}>{name}</option>)}</select></label>
-      <label>Status<select aria-label="Status" value={filters.status} onChange={e => filter('status', e.target.value)}><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="settled">Pagas</option><option value="overdue">Vencidas</option><option value="cancelled">Canceladas</option></select></label>
+      <label>Status<select aria-label="Status" value={filters.status} onChange={e => filter('status', e.target.value)}><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="settled">{accounts?'Pagas / recebidas':'Pagas'}</option><option value="overdue">Vencidas</option><option value="cancelled">Canceladas</option></select></label>
       <label>Forma de pagamento<select aria-label="Forma de pagamento" value={filters.paymentMethod} onChange={e => filter('paymentMethod', e.target.value)}><option value="all">Todas as formas</option>{Object.entries(paymentMethods).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
       <label>Ordenar por<select aria-label="Ordenar por" value={filters.sort} onChange={e => filter('sort', e.target.value)}><option value="due_date">Vencimento</option><option value="title">Descrição</option><option value="amount">Valor</option><option value="created_at">Cadastro</option></select></label>
       <label>Ordem<select aria-label="Ordem" value={filters.order} onChange={e => filter('order', e.target.value)}><option value="asc">Crescente</option><option value="desc">Decrescente</option></select></label>
       <button className="workspace-button subtle" onClick={() => {
         setSearch('');
         setOffset(0);
-        setFilters(initialFilters());
+        setFilters({...initialFilters(),...(accounts?{type:'all'}:{})});
       }}>Limpar filtros</button>
       <button className="workspace-button subtle" disabled={loading || !rows.length} onClick={exportPage}><Download size={15} />Exportar página</button>
     </div>
-    </section><section className="expense-register-panel" aria-labelledby="expense-register-title"><header className="expense-panel-heading"><div><span className="expense-section-kicker">CONTROLE DA OPERAÇÃO</span><h2 id="expense-register-title">Despesas e pagamentos</h2><p>Acompanhe cada conta e mantenha os pagamentos em dia.</p></div><span className="expense-list-label"><Banknote size={16}/>Contas da empresa</span></header><div className="finance-table-frame"><table className="finance-table expenses-table"><thead><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Último pagamento</th><th>Valor / saldo</th><th>Forma</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+    </section><section className="expense-register-panel" aria-labelledby="expense-register-title"><header className="expense-panel-heading"><div><span className="expense-section-kicker">CONTROLE DA OPERAÇÃO</span><h2 id="expense-register-title">{accounts?'Contas e liquidações':'Despesas e pagamentos'}</h2><p>Acompanhe cada conta e mantenha os pagamentos em dia.</p></div><span className="expense-list-label"><Banknote size={16}/>Contas da empresa</span></header><div className="finance-table-frame"><table className="finance-table expenses-table"><thead><tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th>Último pagamento</th><th>Valor / saldo</th><th>Forma</th><th>Status</th><th>Ações</th></tr></thead><tbody>
       {loading ? <tr><td colSpan="8" className="workspace-table-state"><LoaderCircle className="spin" />Carregando despesas…</td></tr> : rows.length ? rows.map(entry => <tr key={entry.id} className={entry.overdue ? 'overdue-row' : ''}>
-        <td data-label="Descrição"><div><strong>{entry.title}</strong><small>{entry.supplier_name || 'Sem fornecedor'} · {activityLabels[entry.business_activity]}</small></div></td>
+        <td data-label="Descrição"><div><strong>{entry.title}</strong>{accounts&&<span className={`expense-category-chip account-type-${entry.entry_type}`}>{entry.entry_type==='income'?'A receber':'A pagar'}</span>}<small>{(entry.entry_type==='income'?entry.customer_name:entry.supplier_name)||'Sem vínculo'} · {activityLabels[entry.business_activity]}</small></div></td>
         <td data-label="Categoria"><span className={`expense-category-chip${entry.expense_category?'':' is-empty'}`}><Tag size={12}/>{entry.expense_category || 'Sem categoria'}</span></td><td data-label="Vencimento">{date(entry.due_date)}</td><td data-label="Último pagamento">{date(entry.last_paid_at)}</td>
         <td data-label="Valor / saldo"><div><strong>{money(entry.amount)}</strong><small>{entry.status === 'cancelled' ? 'Cancelada' : `Em aberto: ${money(entry.balance)}`}</small></div></td><td data-label="Forma">{paymentMethods[entry.payment_method] || 'Sem pagamento'}</td>
         <td data-label="Status"><span className={`finance-status ${entry.status}${entry.overdue?' is-overdue':''}`}>{statusText(entry)}</span></td>
@@ -298,14 +301,14 @@ export default function ExpensesPage() {
                     paymentMethod: 'pix',
                     paidAt: localToday()
                   });
-                }}>Pagar</button>}
+                }}>{entry.entry_type==='income'?'Receber':'Pagar'}</button>}
         </div></td>
-      </tr>) : <tr><td colSpan="8" className="workspace-table-state"><Banknote size={24} /><strong>Nenhuma despesa encontrada</strong><span>Registre uma despesa ou ajuste os filtros para consultar outros períodos.</span></td></tr>}
+      </tr>) : <tr><td colSpan="8" className="workspace-table-state"><Banknote size={24} /><strong>{accounts?'Nenhuma conta encontrada':'Nenhuma despesa encontrada'}</strong><span>Registre uma despesa ou ajuste os filtros para consultar outros períodos.</span></td></tr>}
     </tbody></table></div>
-    <div className="customers-pagination expense-pagination"><span>{total ? `${offset + 1}–${Math.min(offset + 25, total)} de ${total} despesas` : '0 despesas'}</span><button className="workspace-button subtle" disabled={loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Anterior</button><span>Página {Math.floor(offset / 25) + 1} de {Math.max(1, Math.ceil(total / 25))}</span><button className="workspace-button subtle" disabled={loading || offset + 25 >= total} onClick={() => setOffset(offset + 25)}>Próxima</button></div>
-    </section><FinanceEntryDialog draft={draft} setDraft={changeModal(setDraft)} busy={busy} error={error} onSubmit={save} suppliers={suppliers} categories={data?.categories || []} editing={!!editingId} showExpenseCategory />
+    <div className="customers-pagination expense-pagination"><span>{total ? `${offset + 1}–${Math.min(offset + 25, total)} de ${total} ${accounts?'contas':'despesas'}` : (accounts?'0 contas':'0 despesas')}</span><button className="workspace-button subtle" disabled={loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Anterior</button><span>Página {Math.floor(offset / 25) + 1} de {Math.max(1, Math.ceil(total / 25))}</span><button className="workspace-button subtle" disabled={loading || offset + 25 >= total} onClick={() => setOffset(offset + 25)}>Próxima</button></div>
+    </section><FinanceEntryDialog draft={draft} setDraft={changeModal(setDraft)} busy={busy} error={error} onSubmit={save} suppliers={suppliers} customers={customers} categoryLabel={accounts?'Categoria':'Categoria da despesa'} categories={data?.categories || []} editing={!!editingId} showExpenseCategory />
     <FinancePaymentDialog payment={payment} setPayment={changeModal(setPayment)} busy={busy} error={error} onSubmit={settle} />
-    {details && <div className="workspace-backdrop"><section className="workspace-modal" role="dialog" aria-modal="true" aria-labelledby="expense-details-title"><header><span className="workspace-eyebrow">DETALHES DA DESPESA</span><h2 id="expense-details-title">{details.title}</h2><button aria-label="Fechar detalhes" onClick={() => setDetails(null)}><X /></button></header><dl className="expense-details"><div><dt>Categoria</dt><dd>{details.expense_category || 'Sem categoria'}</dd></div><div><dt>Origem</dt><dd>{expenseOrigins[details.source_type]}</dd></div><div><dt>Atividade</dt><dd>{activityLabels[details.business_activity]}</dd></div><div><dt>Situação</dt><dd>{statusText(details)}</dd></div><div><dt>Fornecedor</dt><dd>{details.supplier_name || 'Não informado'}</dd></div><div><dt>Competência</dt><dd>{date(details.competence_date)}</dd></div><div><dt>Vencimento</dt><dd>{date(details.due_date)}</dd></div><div><dt>Valor original</dt><dd>{money(details.amount)}</dd></div><div><dt>Pago / saldo</dt><dd>{money(details.amount_paid)} / {details.status === 'cancelled' ? 'Cancelada' : money(details.balance)}</dd></div></dl><p className="expense-notes">{details.notes || 'Sem observações.'}</p><h3>Histórico de pagamentos</h3>{details.payments?.length ? <ul className="expense-payment-history">{details.payments.map(p => <li key={p.id}><span>{date(p.paid_at)} · {paymentMethods[p.payment_method]}</span><strong>{money(p.amount)}</strong></li>)}</ul> : <p>Nenhum pagamento registrado.</p>}{details.source_type !== 'manual' && <p className="expenses-filter-note">Despesa integrada a {details.source_type === 'purchase' ? 'uma compra' : 'um frete'}. Alterações e cancelamentos devem respeitar o documento de origem.</p>}<footer><button className="workspace-button subtle" onClick={() => setDetails(null)}>Fechar</button></footer></section></div>}
+    {details && <div className="workspace-backdrop"><section className="workspace-modal" role="dialog" aria-modal="true" aria-labelledby="expense-details-title"><header><span className="workspace-eyebrow">DETALHES DA DESPESA</span><h2 id="expense-details-title">{details.title}</h2><button aria-label="Fechar detalhes" onClick={() => setDetails(null)}><X /></button></header><dl className="expense-details"><div><dt>Categoria</dt><dd>{details.expense_category || 'Sem categoria'}</dd></div><div><dt>Origem</dt><dd>{expenseOrigins[details.source_type]}</dd></div><div><dt>Atividade</dt><dd>{activityLabels[details.business_activity]}</dd></div><div><dt>Situação</dt><dd>{statusText(details)}</dd></div><div><dt>{details.entry_type==='income'?'Cliente':'Fornecedor'}</dt><dd>{(details.entry_type==='income'?details.customer_name:details.supplier_name) || 'Não informado'}</dd></div><div><dt>Competência</dt><dd>{date(details.competence_date)}</dd></div><div><dt>Vencimento</dt><dd>{date(details.due_date)}</dd></div><div><dt>Valor original</dt><dd>{money(details.amount)}</dd></div><div><dt>Pago / saldo</dt><dd>{money(details.amount_paid)} / {details.status === 'cancelled' ? 'Cancelada' : money(details.balance)}</dd></div></dl><p className="expense-notes">{details.notes || 'Sem observações.'}</p><h3>Histórico de pagamentos</h3>{details.payments?.length ? <ul className="expense-payment-history">{details.payments.map(p => <li key={p.id}><span>{date(p.paid_at)} · {paymentMethods[p.payment_method]}</span><strong>{money(p.amount)}</strong></li>)}</ul> : <p>Nenhum pagamento registrado.</p>}{details.source_type !== 'manual' && <p className="expenses-filter-note">Despesa integrada a {details.source_type === 'purchase' ? 'uma compra' : 'um frete'}. Alterações e cancelamentos devem respeitar o documento de origem.</p>}<footer><button className="workspace-button subtle" onClick={() => setDetails(null)}>Fechar</button></footer></section></div>}
     {classification && <div className="workspace-backdrop"><section className="workspace-modal" role="dialog" aria-modal="true" aria-labelledby="expense-category-title"><header><span className="workspace-eyebrow">CLASSIFICAÇÃO</span><h2 id="expense-category-title">Categoria da despesa</h2><button aria-label="Fechar categoria" disabled={busy} onClick={() => setClassification(null)}><X /></button></header><form onSubmit={saveCategory}><p>{classification.entry.title}</p><ExpenseCategoryField value={classification.value} categories={data?.categories || []} onChange={value => setClassification({
             ...classification,
             value

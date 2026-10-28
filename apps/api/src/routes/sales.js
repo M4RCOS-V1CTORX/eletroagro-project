@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { activities, parseSaleExtras, dueDateFromTerm } from '../lib/commercial.js';
+import { saleActivities as activities, parseSaleExtras, dueDateFromTerm } from '../lib/commercial.js';
 import { idempotencyGuard, requireAreaPermission, requireCompanyMembership } from '../middleware/neon-auth.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -513,7 +513,8 @@ export function createSalesRouter({ pool, requireAuth, requireDatabase }) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('SELECT id FROM public.sales WHERE company_id=$1 AND id=$2 FOR UPDATE',[request.company.company_id,request.params.id]);
+      const cancellingSale=await client.query('SELECT id,amount_paid FROM public.sales WHERE company_id=$1 AND id=$2 FOR UPDATE',[request.company.company_id,request.params.id]);
+      if(cancellingSale.rows[0]&&decimalUnits(cancellingSale.rows[0].amount_paid,2)>0n){await client.query('ROLLBACK');return response.status(409).json({error:{code:'SALE_HAS_PAYMENTS',message:'A venda possui recebimentos. Regularize os recebimentos antes de cancelar; nenhum valor foi alterado.'}});}
       const paidFreight=await client.query(`SELECT f.id FROM public.financial_entries f WHERE f.company_id=$1 AND f.source_type='freight' AND f.source_id=$2 AND EXISTS(SELECT 1 FROM public.financial_payments p WHERE p.company_id=f.company_id AND p.entry_id=f.id) FOR UPDATE`,[request.company.company_id,request.params.id]);
       if(paidFreight.rowCount) { await client.query('ROLLBACK'); return response.status(409).json({error:{message:'Esta venda possui frete já pago. Regularize o pagamento no financeiro antes de cancelar.'}}); }
       const result = await client.query(

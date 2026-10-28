@@ -10,15 +10,17 @@ const tables = backupTables;
 if (!process.env.DATABASE_URL) { console.error('DATABASE_URL não configurada.'); process.exit(1); }
 if (!process.env.BACKUP_ENCRYPTION_KEY || process.env.BACKUP_ENCRYPTION_KEY.length < 20) { console.error('BACKUP_ENCRYPTION_KEY deve ter pelo menos 20 caracteres.'); process.exit(1); }
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: true } : false, max: 1 });
+let client;
 try {
-  await pool.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+  client=await pool.connect();
+  await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   const data = {};
   for (const table of tables) {
-    const exists=await pool.query('SELECT to_regclass($1) AS name',[`public.${table}`]);
-    if(!exists.rows[0].name && ['sale_year_counters','transport_profiles'].includes(table))continue;
-    data[table] = (await pool.query(`SELECT * FROM public.${table}`)).rows;
+    const exists=await client.query('SELECT to_regclass($1) AS name',[`public.${table}`]);
+    if(!exists.rows[0].name && ['sale_year_counters','transport_profiles','company_access_profiles'].includes(table))continue;
+    data[table] = (await client.query(`SELECT * FROM public.${table}`)).rows;
   }
-  await pool.query('COMMIT');
+  await client.query('COMMIT');
   const protectedBackup = protectBackup({ backupVersion: 1, createdAt: new Date().toISOString(), tables: data },process.env.BACKUP_ENCRYPTION_KEY);
   const folder = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'backups');
   await mkdir(folder, { recursive: true });
@@ -27,5 +29,5 @@ try {
   await writeFile(file, protectedBackup, { flag: 'wx' });
   await writeFile(`${file}.sha256`, `${createHash('sha256').update(protectedBackup).digest('hex')}  ${file.split(/[\\/]/).at(-1)}\n`, { flag: 'wx' });
   console.log(`Backup criado e protegido por checksum: ${file}`);
-} catch (error) { console.error('Falha ao criar backup:', error.message); process.exitCode = 1; }
-finally { await pool.end(); }
+} catch (error) { await client?.query('ROLLBACK').catch(()=>{});console.error('Falha ao criar backup:', error.message); process.exitCode = 1; }
+finally { client?.release();await pool.end(); }

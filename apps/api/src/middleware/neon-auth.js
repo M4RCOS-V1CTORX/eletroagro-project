@@ -1,3 +1,4 @@
+import {authorizeRequest} from '../lib/access-control.js';
 import '../env.js';
 import {atomicIdempotency} from '../lib/request-pool.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
@@ -48,9 +49,10 @@ export function requireCompanyMembership(pool) {
     }
     try {
       const result = await pool.query(
-        `SELECT c.id AS company_id, c.name AS company_name, m.id AS membership_id, m.role, m.permissions
+        `SELECT c.id AS company_id, c.name AS company_name, m.id AS membership_id, m.role, COALESCE(ap.permissions,m.permissions) AS permissions,m.access_profile_id
          FROM public.company_memberships m
          JOIN public.companies c ON c.id = m.company_id
+         LEFT JOIN public.company_access_profiles ap ON ap.company_id=m.company_id AND ap.id=m.access_profile_id
          WHERE m.auth_issuer = $1 AND m.auth_subject = $2
            AND m.is_active AND c.archived_at IS NULL
          ORDER BY m.created_at ASC
@@ -62,7 +64,7 @@ export function requireCompanyMembership(pool) {
       }
       if(request.get('x-company-context') && request.get('x-company-context')!==result.rows[0].company_id)return response.status(409).json({error:{code:'COMPANY_CONTEXT_CHANGED',message:'A empresa da sessão mudou. Reabra o sistema antes de sincronizar.'}});
       request.company = result.rows[0];
-      return next();
+      return await authorizeRequest(pool,request,response,next);
     } catch (error) {
       console.error('Falha ao consultar vínculo da empresa:', error.message);
       return response.status(500).json({ error: { code: 'COMPANY_LOOKUP_FAILED', message: 'Não foi possível carregar a empresa.' } });

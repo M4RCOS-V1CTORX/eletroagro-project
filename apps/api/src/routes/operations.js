@@ -1,7 +1,9 @@
+import {canAction} from '../../../../shared/access-policy.js';
+import {createAgendaRouter} from './agenda.js';
 import {operationLookups} from '../lib/lookups.js';
 import {createExpensesRouter} from './expenses.js';
 import { Router } from 'express';
-import { activities } from '../lib/commercial.js';
+import { activities,purchaseActivities } from '../lib/commercial.js';
 import { randomUUID } from 'node:crypto';
 import { idempotencyGuard, requireCompanyMembership } from '../middleware/neon-auth.js';
 
@@ -60,23 +62,24 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
   const companyId = (req) => req.company.company_id;
   const actor = (req) => req.auth.subject;
   router.use('/finance/expenses',createExpensesRouter({pool,validDate,money,moneyText}));
+  router.use('/finance/accounts',createExpensesRouter({pool,validDate,money,moneyText,fixedType:'all'}));
 
   router.get('/lookups',async(req,res)=>{try{const access=Object.fromEntries(['commercial','operations','finance'].map(area=>[area,req.company.role==='owner'||req.company.permissions?.[area]!==false]));return res.json(await operationLookups(pool,companyId(req),access));}catch(error){return fail(res,error,'carregar as opções da operação');}});
   router.get('/dashboard', async (req, res) => {
     const access=Object.fromEntries(['commercial','finance','operations','audit'].map(area=>[area,req.company.role==='owner'||req.company.permissions?.[area]!==false]));
-    const areaQuery=(area,...args)=>access[area]?pool.query(...args):Promise.resolve({rows:[]});
+    const areaQuery=(module,...args)=>canAction(req.company,module)?pool.query(...args):Promise.resolve({rows:[]});
     const from = validDate(req.query.from) ? req.query.from : null;
     const to = validDate(req.query.to) ? req.query.to : null;
     try {
       const [quotes, sales, orders, finance, stock, upcoming, activity] = await Promise.all([
-        areaQuery('commercial',`SELECT COUNT(*) FILTER (WHERE status IN ('draft','sent'))::int AS open,
+        areaQuery('quotes',`SELECT COUNT(*) FILTER (WHERE status IN ('draft','sent'))::int AS open,
           COUNT(*) FILTER (WHERE status='approved')::int AS approved,
           (SELECT COUNT(*)::int FROM public.quotes expired_quote WHERE expired_quote.company_id=$1 AND expired_quote.archived_at IS NULL AND expired_quote.status='sent' AND expired_quote.valid_until<CURRENT_DATE) AS expired
           FROM public.quotes WHERE company_id=$1 AND archived_at IS NULL AND ($2::date IS NULL OR issued_at::date >= $2) AND ($3::date IS NULL OR issued_at::date <= $3)`, [companyId(req), from, to]),
-        areaQuery('commercial',`SELECT COUNT(*)::int AS count, COALESCE(SUM(total),0)::text AS total,
+        areaQuery('sales',`SELECT COUNT(*)::int AS count, COALESCE(SUM(total),0)::text AS total,
           COALESCE(SUM(amount_paid),0)::text AS received, COALESCE(SUM(total-amount_paid),0)::text AS outstanding
           FROM public.sales WHERE company_id=$1 AND status='completed' AND ($2::date IS NULL OR sale_date >= $2) AND ($3::date IS NULL OR sale_date <= $3)`, [companyId(req), from, to]),
-        areaQuery('operations',`SELECT COUNT(*) FILTER (WHERE status IN ('open','scheduled','in_progress','waiting_material'))::int AS active,
+        areaQuery('orders',`SELECT COUNT(*) FILTER (WHERE status IN ('open','scheduled','in_progress','waiting_material'))::int AS active,
           COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND status NOT IN ('completed','cancelled'))::int AS overdue
           FROM public.service_orders WHERE company_id=$1`, [companyId(req)]),
         areaQuery('finance',`SELECT COALESCE(SUM(p.paid_in_period) FILTER (WHERE f.entry_type='income'),0)::text AS income,
@@ -88,12 +91,12 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
             SELECT SUM(amount) AS paid,SUM(amount) FILTER(WHERE ($2::date IS NULL OR paid_at >= $2) AND ($3::date IS NULL OR paid_at <= $3)) AS paid_in_period
             FROM public.financial_payments WHERE company_id=f.company_id AND entry_id=f.id
           ) p ON true WHERE f.company_id=$1`, [companyId(req), from, to]),
-        areaQuery('operations',`SELECT COUNT(*)::int AS low_count FROM (
+        areaQuery('stock',`SELECT COUNT(*)::int AS low_count FROM (
           SELECT c.id FROM public.catalog_items c LEFT JOIN public.stock_movements m ON m.company_id=c.company_id AND m.catalog_item_id=c.id
           WHERE c.company_id=$1 AND c.item_type='product' AND c.is_active AND c.archived_at IS NULL AND c.minimum_stock>0
           GROUP BY c.id,c.minimum_stock HAVING COALESCE(SUM(CASE WHEN m.direction='in' THEN m.quantity ELSE -m.quantity END),0)<=c.minimum_stock
         ) low_stock`,[companyId(req)]),
-        areaQuery('operations',`SELECT id,title,starts_at,address FROM public.appointments WHERE company_id=$1 AND status='scheduled' AND starts_at >= now() ORDER BY starts_at LIMIT 5`, [companyId(req)]),
+        areaQuery('agenda',`SELECT id,title,starts_at,address FROM public.appointments WHERE company_id=$1 AND status='scheduled' AND starts_at >= now() ORDER BY starts_at LIMIT 5`, [companyId(req)]),
         areaQuery('audit',`SELECT id, action, entity_type, entity_id, summary, created_at FROM public.audit_logs WHERE company_id=$1 ORDER BY created_at DESC LIMIT 6`, [companyId(req)]),
       ]);
       return res.json({ access, quotes: quotes.rows[0] || null, sales: sales.rows[0] || null, orders: orders.rows[0] || null, finance: finance.rows[0] || null, stock: stock.rows[0] || null, upcoming: upcoming.rows, activity: activity.rows });
@@ -124,14 +127,14 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
       const summary = await pool.query(`SELECT
         COALESCE(SUM(p.paid_in_period) FILTER (WHERE f.entry_type='income'),0)::text AS income,
         COALESCE(SUM(p.paid_in_period) FILTER (WHERE f.entry_type='expense'),0)::text AS expense,
-        COALESCE(SUM(GREATEST(f.amount-COALESCE(p.paid,0),0)) FILTER (WHERE f.entry_type='income' AND f.status='pending'),0)::text AS receivable,
-        COALESCE(SUM(GREATEST(f.amount-COALESCE(p.paid,0),0)) FILTER (WHERE f.entry_type='expense' AND f.status='pending'),0)::text AS payable,
-        COUNT(*) FILTER (WHERE f.status='pending' AND f.due_date < CURRENT_DATE)::int AS overdue_count
+        COALESCE(SUM(GREATEST(f.amount-COALESCE(p.paid,0),0)) FILTER (WHERE f.entry_type='income' AND f.status='pending' AND ($2::date IS NULL OR COALESCE(f.due_date,f.competence_date) >= $2) AND ($3::date IS NULL OR COALESCE(f.due_date,f.competence_date) <= $3)),0)::text AS receivable,
+        COALESCE(SUM(GREATEST(f.amount-COALESCE(p.paid,0),0)) FILTER (WHERE f.entry_type='expense' AND f.status='pending' AND ($2::date IS NULL OR COALESCE(f.due_date,f.competence_date) >= $2) AND ($3::date IS NULL OR COALESCE(f.due_date,f.competence_date) <= $3)),0)::text AS payable,
+        COUNT(*) FILTER (WHERE f.status='pending' AND f.due_date < CURRENT_DATE AND ($2::date IS NULL OR COALESCE(f.due_date,f.competence_date) >= $2) AND ($3::date IS NULL OR COALESCE(f.due_date,f.competence_date) <= $3))::int AS overdue_count
         FROM public.financial_entries f LEFT JOIN LATERAL (
           SELECT SUM(amount) AS paid, SUM(amount) FILTER (WHERE ($2::date IS NULL OR paid_at >= $2) AND ($3::date IS NULL OR paid_at <= $3)) AS paid_in_period
           FROM public.financial_payments WHERE company_id=f.company_id AND entry_id=f.id
         ) p ON true
-        WHERE f.company_id=$1 AND ($4='all' OR f.business_activity=$4) AND ($2::date IS NULL OR COALESCE(f.due_date,f.competence_date) >= $2) AND ($3::date IS NULL OR COALESCE(f.due_date,f.competence_date) <= $3)`, [companyId(req),from,to,activity]);
+        WHERE f.company_id=$1 AND ($4='all' OR f.business_activity=$4)`, [companyId(req),from,to,activity]);
       return res.json({ entries: result.rows, summary: summary.rows[0] });
     } catch (error) { return fail(res,error,'consultar o financeiro'); }
   });
@@ -139,6 +142,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
   router.post('/finance', async (req,res) => {
     const body=req.body||{}; if(!activities.has(body.businessActivity??'unassigned'))return res.status(400).json({error:{message:'Selecione uma atividade válida.'}}); const type=body.entryType; const title=typeof body.title==='string'?body.title.trim():'';
     const amount=money(body.amount); const status=body.status==='settled'?'settled':'pending';
+    body.expenseCategory??=body.category;
     const expenseCategory=body.expenseCategory==null||body.expenseCategory===''?null:typeof body.expenseCategory==='string'?body.expenseCategory.trim().replace(/\s+/g,' '):false;
     if(expenseCategory===false||expenseCategory!==null&&(expenseCategory.length<2||expenseCategory.length>80))return res.status(400).json({error:{code:'INVALID_EXPENSE_CATEGORY',message:'Informe uma categoria de 2 a 80 caracteres.'}});
     if(!['income','expense'].includes(type)||title.length<2||title.length>180||amount===null||amount<=0n) return res.status(400).json({error:{code:'INVALID_FINANCIAL_ENTRY',message:'Confira o tipo, a descrição e o valor do lançamento.'}});
@@ -150,7 +154,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     const frequency=body.scheduleFrequency==='week'?'week':'month';
     if(scheduleMode==='installments'&&amount<BigInt(requestedCount))return res.status(400).json({error:{code:'INSTALLMENT_TOO_SMALL',message:'O valor deve permitir ao menos um centavo por parcela.'}});
     const recurrenceGroup=requestedCount>1?randomUUID():null;
-    const withExpenseCategory=type==='expense'&&expenseCategory!==null;
+    const withExpenseCategory=expenseCategory!==null;
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
@@ -233,7 +237,8 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     try{const result=await pool.query(`UPDATE public.service_orders SET status=$3,completed_at=CASE WHEN $3='completed' THEN now() WHEN status='completed' THEN NULL ELSE completed_at END,updated_at=now() WHERE company_id=$1 AND id=$2 RETURNING id,order_number,status,completed_at`,[companyId(req),req.params.id,req.body.status]);if(!result.rowCount)return res.status(404).json({error:{code:'ORDER_NOT_FOUND',message:'Ordem de serviço não encontrada.'}});await audit(pool,companyId(req),actor(req),'status_changed','service_order',req.params.id,{status:req.body.status});return res.json({order:result.rows[0]});}catch(error){return fail(res,error,'atualizar a ordem de serviço');}
   });
 
-  router.get('/appointments',async(req,res)=>{const from=validDate(req.query.from)?req.query.from:null;const to=validDate(req.query.to)?req.query.to:null;try{const result=await pool.query(`SELECT a.*,c.name AS customer_name,so.order_number FROM public.appointments a LEFT JOIN public.customers c ON c.company_id=a.company_id AND c.id=a.customer_id LEFT JOIN public.service_orders so ON so.company_id=a.company_id AND so.id=a.service_order_id WHERE a.company_id=$1 AND ($2::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date >= $2) AND ($3::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date <= $3) ORDER BY a.starts_at LIMIT 300`,[companyId(req),from,to]);return res.json({appointments:result.rows});}catch(error){return fail(res,error,'consultar a agenda');}});
+  router.use('/appointments',createAgendaRouter({pool}));
+  router.get('/appointments',async(req,res)=>{const from=validDate(req.query.from)?req.query.from:null;const to=validDate(req.query.to)?req.query.to:null;try{const result=await pool.query(`SELECT a.*,c.name AS customer_name,so.order_number FROM public.appointments a LEFT JOIN public.customers c ON c.company_id=a.company_id AND c.id=a.customer_id LEFT JOIN public.service_orders so ON so.company_id=a.company_id AND so.id=a.service_order_id WHERE a.company_id=$1 AND a.deleted_at IS NULL AND ($2::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date >= $2) AND ($3::date IS NULL OR (a.starts_at AT TIME ZONE 'America/Bahia')::date <= $3) ORDER BY a.starts_at LIMIT 300`,[companyId(req),from,to]);return res.json({appointments:result.rows});}catch(error){return fail(res,error,'consultar a agenda');}});
 
   router.post('/appointments',async(req,res)=>{const b=req.body||{};const title=typeof b.title==='string'?b.title.trim():'';if(title.length<2||title.length>180||!b.startsAt||Number.isNaN(Date.parse(b.startsAt))||b.endsAt&&(Number.isNaN(Date.parse(b.endsAt))||Date.parse(b.endsAt)<=Date.parse(b.startsAt)))return res.status(400).json({error:{code:'INVALID_APPOINTMENT',message:'Informe título e horários válidos.'}});try{const result=await pool.query(`INSERT INTO public.appointments(company_id,customer_id,service_order_id,title,starts_at,ends_at,address,notes,created_by_subject) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[companyId(req),uuidPattern.test(b.customerId||'')?b.customerId:null,uuidPattern.test(b.serviceOrderId||'')?b.serviceOrderId:null,title,b.startsAt,b.endsAt||null,String(b.address||'').slice(0,500),String(b.notes||'').slice(0,3000),actor(req)]);await audit(pool,companyId(req),actor(req),'created','appointment',result.rows[0].id,{title});return res.status(201).json({appointment:result.rows[0]});}catch(error){return fail(res,error,'agendar o compromisso');}});
 
@@ -249,7 +254,7 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     catch(error){return fail(res,error,'listar compras');}
   });
   router.post('/purchases',async(req,res)=>{
-    if(!activities.has(req.body?.businessActivity??'unassigned'))return res.status(400).json({error:{message:'Selecione uma atividade válida.'}});
+    if(!purchaseActivities.has(req.body?.businessActivity??'unassigned'))return res.status(400).json({error:{message:'Selecione uma atividade válida.'}});
     const b=req.body||{};const items=Array.isArray(b.items)?b.items:[];const supplierId=uuidPattern.test(b.supplierId||'')?b.supplierId:null;
     if(items.length<1||items.length>100||b.purchaseDate&&!validDate(b.purchaseDate)||b.dueDate&&!validDate(b.dueDate))return res.status(400).json({error:{code:'INVALID_PURCHASE',message:'Informe itens e datas válidos para a compra.'}});
     const parsed=[];let total=0n;
@@ -268,6 +273,6 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     }catch(error){await client.query('ROLLBACK').catch(()=>{});return fail(res,error,'registrar a compra');}finally{client.release();}
   });
 
-  router.get('/audit',async(req,res)=>{try{const result=await pool.query(`SELECT id,actor_subject,action,entity_type,entity_id,summary,created_at FROM public.audit_logs WHERE company_id=$1 ORDER BY created_at DESC LIMIT 200`,[companyId(req)]);return res.json({activity:result.rows});}catch(error){return fail(res,error,'consultar o histórico');}});
+  router.get('/audit',async(req,res)=>{const q=req.query;const offset=Number(q.offset||0);if(!Number.isSafeInteger(offset)||offset<0||q.from&&!validDate(q.from)||q.to&&!validDate(q.to))return res.status(400).json({error:{message:'Filtros inválidos.'}});try{const result=await pool.query(`SELECT id,actor_subject,action,entity_type,entity_id,summary,created_at,COUNT(*) OVER()::int AS total_count FROM public.audit_logs WHERE company_id=$1 AND ($2='' OR action ILIKE '%'||$2||'%' OR actor_subject ILIKE '%'||$2||'%' OR summary::text ILIKE '%'||$2||'%') AND ($3::date IS NULL OR (created_at AT TIME ZONE 'America/Bahia')::date>=$3) AND ($4::date IS NULL OR (created_at AT TIME ZONE 'America/Bahia')::date<=$4) AND ($5='' OR entity_type=$5) AND ($6='' OR action=$6) ORDER BY created_at ${q.order==='asc'?'ASC':'DESC'},id LIMIT 50 OFFSET $7`,[companyId(req),String(q.q||'').slice(0,100),q.from||null,q.to||null,String(q.entity||''),String(q.action||''),offset]);return res.json({activity:result.rows,total:result.rows[0]?.total_count||0});}catch(error){return fail(res,error,'consultar o histórico');}});
   return router;
 }

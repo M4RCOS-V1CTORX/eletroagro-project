@@ -58,6 +58,12 @@ export function drawPdfHeader(doc, { company, title, number = '', numberPrefix =
   if (subtitle) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...palette.muted); doc.text(subtitle, width - margin, 27, { align: 'right' }); }
   if (status) { const labelWidth = Math.max(28, Math.min(48, doc.getTextWidth(status) + 10)); doc.setFillColor(...palette.green); doc.roundedRect(width - margin - labelWidth, 31, labelWidth, 7, 3.5, 3.5, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...palette.white); doc.text(status.toUpperCase(), width - margin - labelWidth / 2, 35.6, { align: 'center' }); }
   doc.setDrawColor(...palette.line); doc.setLineWidth(.5); doc.line(margin, 41, width - margin, 41); doc.setFillColor(...palette.gold); doc.roundedRect(margin, 40.35, 32, 1.3, .65, .65, 'F');
+  if(company?.address){
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...palette.muted);
+    const addressLines=doc.splitTextToSize(String(company.address),width-margin*2);
+    doc.text(addressLines,margin,47);
+    return 53+addressLines.length*3.3;
+  }
   return 50;
 }
 

@@ -1,4 +1,5 @@
-import {dueFromTerm,localToday} from './commercial.js';
+import {dueFromTerm,localToday,activityOptions} from './commercial.js';
+import {canAction} from '../../../shared/access-policy.js';
 const methods=new Set(['pix','cash','card_debit','card_credit','transfer','boleto','other']);
 export function units(value,decimals=2){const text=String(value??'0');if(!new RegExp(`^\\d{1,${decimals===3?9:10}}(?:\\.\\d{1,${decimals}})?$`).test(text))throw new Error('Confira os valores e quantidades. Use números positivos e a precisão indicada.');const[whole,fraction='']=text.split('.');const result=BigInt(whole)*10n**BigInt(decimals)+BigInt((fraction+'0'.repeat(decimals)).slice(0,decimals));if(result>999999999999n)throw new Error('O valor excede o limite permitido.');return result;}
 export const decimal=(value,decimals=2)=>{const magnitude=value<0n?-value:value;return`${value<0n?'-':''}${magnitude/10n**BigInt(decimals)}.${String(magnitude%10n**BigInt(decimals)).padStart(decimals,'0')}`;};
@@ -11,6 +12,26 @@ function shiftDate(value,index,frequency){const d=new Date(`${value}T12:00:00Z`)
 
 export function applyOfflineCommand(source,command){
   const data=structuredClone(source),body=command.payload||{},path=command.path,method=command.method;
+  if(data.company?.permissions?.version===2){
+    const allow=(module,action)=>canAction(data.company,module,action);
+    let module=path.split('/')[2],action=method==='POST'?'create':method==='DELETE'?'delete':'edit';
+    if(path.includes('/appointments')){module='agenda';if(body.status==='cancelled')action='cancel';}
+    else if(path.includes('/stock/'))module='stock';
+    else if(path.includes('/purchases'))module='purchases';
+    else if(path.includes('/receipts'))module='receipts';
+    else if(path.includes('/finance')){
+      const entry=data.entries.find(e=>path.includes(e.id)),type=entry?.entry_type||body.entryType;
+      module=type==='income'?'receivables':'payables';
+      if(path.endsWith('/payments'))action=type==='income'?'receive':'pay';
+      if(!allow(module,action)&&!allow('finance',action)&&!(type==='expense'&&allow('expenses',action)))throw new Error('Seu perfil não permite esta operação financeira offline.');
+      module=null;
+      if(body.status==='settled'&&!allow('finance',type==='income'?'receive':'pay')&&!allow(type==='income'?'receivables':'payables',type==='income'?'receive':'pay')&&!(type==='expense'&&allow('expenses','pay')))throw new Error('Seu perfil não permite registrar pagamento offline.');
+    }
+    if(module==='sales'&&path.endsWith('/payments'))action='receive';
+    if(module&&!allow(module,action))throw new Error('Seu perfil não permite esta operação offline.');
+    if(module==='sales'&&Number(body.amountPaid)>0&&!allow('sales','receive'))throw new Error('Seu perfil não permite registrar recebimentos offline.');
+    if(module==='purchases'&&Number(body.amountPaid)>0&&!allow('payables','pay')&&!allow('finance','pay'))throw new Error('Seu perfil não permite registrar pagamentos de compras offline.');
+  }
   command.localIds ||= {};const id=name=>command.localIds[name] ||= crypto.randomUUID();
   const bindings={},bind=(name,selector)=>{const value=id(name);bindings[value]=selector;return value;};
   const stamp=new Date(command.createdAt||Date.now()).toISOString(),reference=`OFF-${command.id}`;
@@ -19,7 +40,7 @@ export function applyOfflineCommand(source,command){
   const can=area=>data.access?.[area]!==false;
   const authorize=area=>{if(!can(area))throw new Error('Seu perfil não permite executar esta operação offline.');};
   const find=(list,key,label)=>{const result=(list||[]).find(row=>row.id===key);if(!result)throw new Error(`${label} não está disponível nos dados deste aparelho. Prepare o modo offline antes de sair.`);return result;};
-  const activity=body.businessActivity||'unassigned';if(!['unassigned','electrical','farm'].includes(activity))throw new Error('Selecione uma atividade válida.');
+  const activity=body.businessActivity||'unassigned';if(!activityOptions.all.includes(activity))throw new Error('Selecione uma atividade válida.');
   function paymentMethod(value=body.paymentMethod){if(!methods.has(value))throw new Error('Selecione uma forma de pagamento válida.');return value;}
   function stockChange(itemId,quantity,direction,reason,trackedOnly=false){
     const product=find(catalogRows,itemId,'Produto');if(product.archived_at||!product.is_active||product.item_type!=='product')throw new Error('Produto indisponível para movimentação.');
@@ -49,6 +70,7 @@ export function applyOfflineCommand(source,command){
     authorize('commercial');const entry={id:bind('entity','profile.id'),vehicle:requireText(body.vehicle,'veículo',120),plate:String(body.plate||'').trim().toUpperCase(),driver:String(body.driver||'').trim()};if(entry.plate.length>12||entry.driver.length>120)throw new Error('Confira placa e motorista.');data.transportProfiles.push(entry);return{data,result:{profile:entry},bindings};
   }
   if(path==='/api/sales'&&method==='POST'){
+    if(!activityOptions.sale.includes(activity))throw new Error('Selecione uma atividade válida para a venda.');
     authorize('commercial');paymentMethod();let customer,items,discount;
     if(body.quoteId){const quote=find(data.quotes,body.quoteId,'Orçamento');if(quote.status!=='approved'||data.sales.some(s=>s.quote_id===quote.id))throw new Error('Este orçamento não pode ser convertido.');customer={id:quote.customer_id,name:quote.customer_name,tax_identifier:quote.customer_tax_identifier,phone:quote.customer_phone,...data.customers.find(c=>c.id===quote.customer_id)};items=quote.items.map(i=>({...i}));discount=units(quote.discount_amount);}
     else{
@@ -82,6 +104,7 @@ export function applyOfflineCommand(source,command){
     return{data,result:{entry:entries[0],entries},bindings};
   }
   if(path==='/api/operations/purchases'&&method==='POST'){
+    if(![...activityOptions.purchase,'electrical','farm'].includes(activity))throw new Error('Selecione uma atividade válida para a compra.');
     authorize('finance');const purchaseDate=date(body.purchaseDate);if(!Array.isArray(body.items)||!body.items.length||body.items.length>100)throw new Error('Adicione os produtos da compra.');let total=0n;
     for(const item of body.items){const quantity=units(item.quantity,3),cost=units(item.unitCost);if(quantity<=0n)throw new Error('Informe uma quantidade positiva.');stockChange(item.catalogItemId,quantity,'in',`Compra provisória ${reference}`);total+=(quantity*cost+500n)/1000n;}
     if(total>999999999999n)throw new Error('O total da compra excede o limite.');const paid=units(body.amountPaid||'0');if(paid>total)throw new Error('O pagamento supera a compra.');if(body.supplierId)find(supplierRows,body.supplierId,'Fornecedor');
@@ -94,7 +117,7 @@ export function applyOfflineCommand(source,command){
   }
   if(path==='/api/operations/appointments'&&method==='POST'){
     authorize('operations');const start=new Date(body.startsAt),end=body.endsAt?new Date(body.endsAt):null;if(Number.isNaN(start.getTime())||end&&(Number.isNaN(end.getTime())||end<=start))throw new Error('Confira os horários do compromisso.');
-    const appointment={id:bind('entity','appointment.id'),title:requireText(body.title,'título',180),starts_at:start.toISOString(),ends_at:end?.toISOString()||null,customer_id:body.customerId||null,service_order_id:body.serviceOrderId||null,status:'scheduled',address:body.address||'',notes:body.notes||'',...meta};data.appointments.push(appointment);return{data,result:{appointment},bindings};
+    const appointment={id:bind('entity','appointment.id'),title:requireText(body.title,'título',180),starts_at:start.toISOString(),ends_at:end?.toISOString()||null,customer_id:body.customerId||null,service_order_id:body.serviceOrderId||null,status:'scheduled',category:body.category||null,priority:body.priority||'normal',responsible_member_id:body.responsibleMemberId||null,supplier_id:body.supplierId||null,address:body.address||'',notes:body.notes||'',...meta};data.appointments.push(appointment);return{data,result:{appointment},bindings};
   }
   if((match=/^\/api\/operations\/appointments\/([\da-f-]+)\/status$/.exec(path))&&method==='PATCH'){
     authorize('operations');if(!['scheduled','completed','cancelled'].includes(body.status))throw new Error('Situação inválida.');const appointment=find(data.appointments,match[1],'Compromisso');Object.assign(appointment,{status:body.status,...meta});return{data,result:{appointment},bindings};

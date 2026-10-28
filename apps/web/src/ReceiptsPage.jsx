@@ -27,6 +27,7 @@ export default function ReceiptsPage() {
     finally { setBusyId(''); }
   }
   async function downloadReceipt(id) {
+    await apiRequest('/api/company/authorize?module=receipts&action=export');
     const {receipt}=await apiRequest(`/api/completion/receipts/${id}`);
     const {doc,filename}=await createReceiptPdf(receipt);await savePdfToDevice(doc,filename);
   }

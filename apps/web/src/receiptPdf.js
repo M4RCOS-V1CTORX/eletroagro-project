@@ -1,7 +1,7 @@
 import {createPdfPalette,drawPdfFooters,drawPdfHeader,drawPdfSection,drawPdfSignature,formatPdfCurrency,formatPdfDate,loadPdfLogo,PDF_PAGE} from './pdfDesign.js';
 const methods={pix:'Pix',cash:'Dinheiro',card_debit:'Débito',card_credit:'Crédito',transfer:'Transferência',boleto:'Boleto',other:'Outro'};
 export async function createReceiptPdf(receipt,{logo:providedLogo}={}){
-  const{jsPDF}=await import('jspdf');const doc=new jsPDF({unit:'mm',format:'a4'}),company={name:receipt.company_name,tax_identifier:receipt.tax_identifier,phone:receipt.phone,email:receipt.email,document_settings:receipt.document_settings||{}};
+  const{jsPDF}=await import('jspdf');const doc=new jsPDF({unit:'mm',format:'a4'}),company={name:receipt.company_name,tax_identifier:receipt.tax_identifier,phone:receipt.phone,email:receipt.email,address:receipt.address,document_settings:receipt.document_settings||{}};
   const palette=createPdfPalette(company),logo=providedLogo===undefined?await loadPdfLogo():providedLogo,{width,margin,contentBottom}=PDF_PAGE,right=width-margin;
   const number=receipt.is_provisional?`PROV-${receipt.provisional_reference?.slice(-16)}`:String(receipt.receipt_number).padStart(4,'0');
   let y=drawPdfHeader(doc,{company,title:'Recibo',number,subtitle:`Pagamento: ${formatPdfDate(receipt.paid_at)}`,status:receipt.is_provisional?'Provisório — offline':'Pagamento confirmado',palette,logo});

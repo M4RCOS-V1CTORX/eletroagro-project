@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 
-export const backupTables = ['companies','company_memberships','customers','catalog_items','suppliers','document_counters','sale_year_counters','transport_profiles','quotes','quote_items','quote_status_history','quote_versions','sales','sale_items','sale_payments','company_invitations','financial_entries','financial_payments','service_orders','service_order_items','appointments','stock_movements','purchases','purchase_items','receipts','service_order_attachments','notification_preferences','idempotency_keys','audit_logs'];
+export const backupTables = ['companies','company_access_profiles','company_memberships','customers','catalog_items','suppliers','document_counters','sale_year_counters','transport_profiles','quotes','quote_items','quote_status_history','quote_versions','sales','sale_items','sale_payments','company_invitations','financial_entries','financial_payments','service_orders','service_order_items','appointments','stock_movements','purchases','purchase_items','receipts','service_order_attachments','notification_preferences','idempotency_keys','audit_logs'];
 
 export function protectBackup(payload, password) {
   if (!password || password.length < 20) throw new Error('A chave do backup deve ter pelo menos 20 caracteres.');
@@ -24,7 +24,7 @@ export function validateBackup(payload) {
   if (payload?.backupVersion !== 1 || !payload.tables || typeof payload.tables !== 'object') throw new Error('Estrutura de backup inválida.');
   for (const table of backupTables) {
     // These tables were introduced after the original backup format.
-    if (['sale_year_counters', 'transport_profiles'].includes(table) && payload.tables[table] === undefined) continue;
+    if (['sale_year_counters', 'transport_profiles','company_access_profiles'].includes(table) && payload.tables[table] === undefined) continue;
     if (!Array.isArray(payload.tables[table])) throw new Error(`Backup incompleto: tabela ${table} ausente.`);
     for (const row of payload.tables[table]) {
       if (!row || Array.isArray(row) || typeof row !== 'object' || !Object.keys(row).length || Object.keys(row).some(key => !/^[a-z][a-z0-9_]*$/.test(key))) throw new Error(`Registro inválido em ${table}.`);
