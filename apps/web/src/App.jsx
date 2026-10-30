@@ -114,12 +114,14 @@ export default function App() {
   useEffect(() => {
     const updateQueue = (event) => setPendingSync(event?.detail?.count ?? 0);
     const handleOnline = async () => { setOnline(true); const result = await flushOfflineQueue(); setPendingSync(result.remaining); };
+    const handleFocus = () => { if(navigator.onLine)flushOfflineQueue().catch(()=>{}); };
     const handleOffline = () => setOnline(false);
     const handleInstall = (event) => { event.preventDefault(); setInstallPrompt(event); };
     offlineQueueCount().then(setPendingSync).catch(() => {});
     window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('eletroagro:offline-queue', updateQueue); window.addEventListener('beforeinstallprompt', handleInstall);
-    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); window.removeEventListener('eletroagro:offline-queue', updateQueue); window.removeEventListener('beforeinstallprompt', handleInstall); };
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); window.removeEventListener('focus', handleFocus); window.removeEventListener('eletroagro:offline-queue', updateQueue); window.removeEventListener('beforeinstallprompt', handleInstall); };
   }, []);
 
   useEffect(() => {
@@ -311,14 +313,17 @@ export default function App() {
   }
 
   async function handleSignOut() {
-    await forgetOfflineSession();setApiContext(null);
-    if(navigator.onLine)await authClient?.signOut().catch(()=>{});
-    setUser(null);
-    setCompanyName('');
-    setPage('overview');
-    setMobileMoreOpen(false);
-    setAuthError('');
-    setAuthNotice('');
+    setAuthBusy(true);
+    try {
+      await forgetOfflineSession();setApiContext(null);
+      setUser(null);
+      setCompanyName('');
+      setPage('overview');
+      setMobileMoreOpen(false);
+      setAuthError('');
+      setAuthNotice('');
+      if(navigator.onLine)await authClient?.signOut().catch(()=>{});
+    } finally { setAuthBusy(false); }
   }
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
