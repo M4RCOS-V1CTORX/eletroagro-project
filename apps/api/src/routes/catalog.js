@@ -74,6 +74,7 @@ export function createCatalogRouter({ pool, requireAuth, requireDatabase }) {
     const type = ['product', 'service'].includes(request.query.type) ? request.query.type : '';
     const status = ['active', 'inactive', 'archived', 'all'].includes(request.query.status) ? request.query.status : 'active';
     const query = typeof request.query.q === 'string' ? request.query.q.trim().slice(0, 120) : '';
+    const offset = Math.max(0, Math.min(Number.parseInt(request.query.offset, 10) || 0, 2147483647));
     try {
       const result = await pool.query(
         `SELECT id, item_type, code, name, description, category, unit, cost_price, sale_price,
@@ -88,8 +89,8 @@ export function createCatalogRouter({ pool, requireAuth, requireDatabase }) {
            AND ($4 = '' OR name ILIKE '%' || $4 || '%' OR COALESCE(code, '') ILIKE '%' || $4 || '%'
              OR COALESCE(category, '') ILIKE '%' || $4 || '%')
          ORDER BY lower(name), id
-         LIMIT 100`,
-        [request.company.company_id, type, status, query],
+         LIMIT 100 OFFSET $5`,
+        [request.company.company_id, type, status, query, offset],
       );
       return response.json({ items: result.rows.map(({ total_count, ...item }) => item), total: result.rowCount ? result.rows[0].total_count : 0 });
     } catch (error) {

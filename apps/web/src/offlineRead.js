@@ -34,7 +34,7 @@ export function readOffline(data,path){
     let rows=source.filter(row=>state(row,q.get('status'))&&(!search||text([row.name,row.code,row.tax_identifier,row.phone,row.category].join(' ')).includes(search)));
     if(group==='catalog')rows=rows.filter(row=>(!q.get('type')||row.item_type===q.get('type'))&&(q.get('status')!=='active'||row.is_active));
     rows.sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));if(q.get('order')==='desc')rows.reverse();
-    return group==='catalog'?{items:rows.slice(0,100),total:rows.length}:page(rows,q,group);
+    const catalogOffset=Math.max(0,Number.parseInt(q.get('offset'),10)||0);return group==='catalog'?{items:rows.slice(catalogOffset,catalogOffset+100),total:rows.length}:page(rows,q,group);
   }
   if(p==='/api/sales/transport-profiles'){can('commercial');return{profiles:data.transportProfiles};}
   if(p==='/api/sales/approved-quotes'){can('commercial');return{quotes:data.quotes.filter(r=>r.status==='approved'&&!r.archived_at&&!data.sales.some(s=>s.quote_id===r.id))};}

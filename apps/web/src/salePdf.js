@@ -8,7 +8,7 @@ export async function createSalePdf(sale,company,{logo:providedLogo}={}) {
   const logo=providedLogo===undefined?await loadPdfLogo():providedLogo;
   const {width,margin,contentBottom}=PDF_PAGE, right=width-margin;
   const number=saleNumber(sale),title='Nota de produtos';
-  let y=drawPdfHeader(doc,{company,title,number,numberPrefix:'Nº ',subtitle:`Data: ${formatPdfDate(sale.sale_date)}`,status:sale.is_preview?'Prévia':sale.is_provisional?'Provisória — offline':sale.status==='cancelled'?'Cancelada':'Concluída',palette,logo});
+  let y=drawPdfHeader(doc,{company,title,number,numberPrefix:'Nº ',subtitle:`Data: ${formatPdfDate(sale.sale_date)}`,status:sale.is_preview?'Prévia':sale.is_provisional?'Provisória — offline':sale.status==='cancelled'?'Cancelada':'Concluída',palette,logo,groupedCompany:true});
   function newPage(){doc.addPage();y=drawPdfHeader(doc,{company,title,number,numberPrefix:'Nº ',palette,compact:true});}
   function room(height){if(y+height>contentBottom)newPage();}
   function line(text,{bold=false,size=9,color=palette.ink}={}){room(6);doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(size);doc.setTextColor(...color);doc.text(String(text),margin+4,y);y+=5;}

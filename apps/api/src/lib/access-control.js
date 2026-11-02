@@ -8,6 +8,7 @@ export function requestRequirement(req){
   if(path.startsWith('/api/company/admin'))return ['users',read?'view':path.includes('profiles')||path.includes('permissions')?'administer':path.includes('recovery')?'reset':action];
   if(path.startsWith('/api/company/access'))return ['users',read?'view':path.includes('permissions')?'administer':'edit'];
   if(path.startsWith('/api/company/invitations'))return ['users',method==='DELETE'?'edit':'create'];
+  if(path.startsWith('/api/load-forecasts'))return ['quotes',action];
   for(const module of ['customers','catalog','suppliers','quotes','sales'])if(path.startsWith(`/api/${module}`)){
     if(path.includes('/cancel'))return[module,'cancel'];
     if(path.includes('/payments'))return[module,'receive'];

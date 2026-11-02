@@ -1,6 +1,7 @@
+import LoadForecastsPage from './LoadForecastsPage.jsx';
 import {useSyncRefresh} from './useSyncRefresh.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, ClipboardList, Truck, Copy, Download, Eye, LoaderCircle, Pencil, Plus, Search, Share2, Trash2, UserRoundPlus, X } from 'lucide-react';
 import {archivePdf,savePdfToDevice} from './deviceFiles.js';
 import { apiRequest } from './apiClient.js';
 import { addContainedImage, loadPdfLogo, pdfAccent } from './pdfDesign.js';
@@ -227,6 +228,7 @@ function formatDate(value) {
 }
 
 export default function QuotesPage() {
+  const [showForecasts, setShowForecasts] = useState(false);
   useSyncRefresh(()=>loadQuotes(pagination.offset));
   const [quotes, setQuotes] = useState([]);
   const [summary, setSummary] = useState({ draft_count: 0, sent_count: 0, sent_total: '0', approved_count: 0, approved_total: '0', expiring_count: 0, overdue_count: 0 });
@@ -460,7 +462,17 @@ export default function QuotesPage() {
   const matchingCustomers = customers.filter((customer) => `${customer.name} ${customer.phone || ''} ${customer.tax_identifier || ''}`.toLocaleLowerCase('pt-BR').includes(customerQuery.trim().toLocaleLowerCase('pt-BR')));
   const selectedCustomer = customers.find((customer) => customer.id === draft?.customerId);
 
+  const commercialNavigation = <nav className="quote-module-nav" aria-label="Áreas de orçamentos">
+    <button type="button" className={`quote-module-option ${!showForecasts ? 'is-active' : ''}`} onClick={() => setShowForecasts(false)} aria-current={!showForecasts ? 'page' : undefined}>
+      <span className="quote-module-icon"><ClipboardList size={22}/></span><span className="quote-module-copy"><strong>Orçamentos</strong><small>Crie e acompanhe suas propostas</small></span><ChevronRight className="quote-module-arrow" size={19}/>
+    </button>
+    <button type="button" className={`quote-module-option ${showForecasts ? 'is-active' : ''}`} onClick={() => setShowForecasts(true)} aria-current={showForecasts ? 'page' : undefined}>
+      <span className="quote-module-icon"><Truck size={22}/></span><span className="quote-module-copy"><strong>Previsão de Carga</strong><small>Organize produtos e cargas da propriedade</small></span><ChevronRight className="quote-module-arrow" size={19}/>
+    </button>
+  </nav>;
+  if (showForecasts) return <><div className="customers-page quote-module-wrap">{commercialNavigation}</div><LoadForecastsPage onBack={() => setShowForecasts(false)} /></>;
   return <section className="customers-page quotes-page">
+    {commercialNavigation}
     <div className="customers-heading"><div><span className="customers-kicker">COMERCIAL</span><h1>Orçamentos</h1><p>Crie propostas com itens do catálogo e acompanhe a resposta do cliente.</p></div><button className="customers-primary add-customer-button" onClick={beginDraft} disabled={busy}><CirclePlus size={17} /> Novo orçamento</button></div>
     {error && !draft && <p className="customers-feedback error" role="alert">{error}<button onClick={() => loadQuotes(pagination.offset)}>Tentar novamente</button></p>}
     {notice && <p className="customers-feedback success" role="status">{notice}<button aria-label="Fechar mensagem" onClick={() => setNotice('')}><X size={15} /></button></p>}

@@ -39,13 +39,33 @@ export function addContainedImage(doc, image, box) {
   doc.addImage(image.data, image.format || 'JPEG', box.x + (box.width - width) / 2, box.y + (box.height - height) / 2, width, height);
 }
 
-export function drawPdfHeader(doc, { company, title, number = '', numberPrefix = 'Nº ', subtitle = '', status = '', palette = createPdfPalette(company), logo = null, compact = false }) {
+export function drawPdfHeader(doc, { company, title, number = '', numberPrefix = 'Nº ', subtitle = '', status = '', palette = createPdfPalette(company), logo = null, compact = false, groupedCompany = false }) {
   const { width, margin } = PDF_PAGE; const height = compact ? 24 : 43;
   doc.setFillColor(...palette.white); doc.rect(0, 0, width, height, 'F'); doc.setFillColor(...palette.accent); doc.rect(0, 0, width, 2.2, 'F');
   if (compact) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...palette.navy); doc.text(company?.name || 'EletroAgro', margin, 12);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...palette.muted); doc.text(`${title}${number ? `  ${numberPrefix}${number}` : ''}`, width - margin, 12, { align: 'right' });
     doc.setDrawColor(...palette.line); doc.line(margin, 18, width - margin, 18); return 27;
+  }
+  if (groupedCompany) {
+    addContainedImage(doc, logo, { x: margin, y: 6, width: 22, height: 22 });
+    const x = logo ? 42 : margin, maxWidth = logo ? 70 : 96;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...palette.navy);
+    const nameLines = doc.splitTextToSize(String(company?.name || 'EletroAgro'), maxWidth);
+    doc.text(nameLines, x, 12);
+    let next = 12 + nameLines.length * 4.5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...palette.muted);
+    for (const value of [company?.tax_identifier && `CPF/CNPJ: ${company.tax_identifier}`, company?.phone && `Telefone: ${company.phone}`, company?.email && `E-mail: ${company.email}`, company?.address && `Endereço: ${company.address}`].filter(Boolean)) {
+      const lines = doc.splitTextToSize(String(value), maxWidth);
+      doc.text(lines, x, next); next += lines.length * 3.8;
+    }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13.5); doc.setTextColor(...palette.navy); doc.text(title.toUpperCase(), width - margin, 13, { align: 'right' });
+    if (number) { doc.setFontSize(number.length > 28 ? 8 : 10.5); doc.text(`${numberPrefix}${number}`, width - margin, 20, { align: 'right' }); }
+    if (subtitle) { doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...palette.muted); doc.text(subtitle, width - margin, 27, { align: 'right' }); }
+    if (status) { doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...palette.green); doc.text(status.toUpperCase(), width - margin, 34, { align: 'right' }); }
+    const bottom = Math.max(40, next + 2);
+    doc.setDrawColor(...palette.line); doc.line(margin, bottom, width - margin, bottom);
+    return bottom + 8;
   }
   addContainedImage(doc, logo, { x: margin, y: 6, width: 27, height: 27 });
   const brandX = logo ? 48 : margin; const companyName = String(company?.name || 'EletroAgro');

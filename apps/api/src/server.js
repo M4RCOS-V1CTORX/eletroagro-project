@@ -11,6 +11,7 @@ import { createCompaniesRouter } from './routes/companies.js';
 import { createCustomersRouter } from './routes/customers.js';
 import { createCatalogRouter } from './routes/catalog.js';
 import { createQuotesRouter } from './routes/quotes.js';
+import { createLoadForecastsRouter } from './routes/load-forecasts.js';
 import { createSuppliersRouter } from './routes/suppliers.js';
 import { createSalesRouter } from './routes/sales.js';
 import { createOperationsRouter } from './routes/operations.js';
@@ -103,6 +104,7 @@ app.use('/api/catalog', createCatalogRouter({
   requireAuth: requireNeonAuth,
   requireDatabase,
 }));
+app.use('/api/load-forecasts', createLoadForecastsRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 app.use('/api/quotes', createQuotesRouter({
   pool,
   requireAuth: requireNeonAuth,

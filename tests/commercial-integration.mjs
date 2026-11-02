@@ -12,6 +12,7 @@ import {createCustomersRouter} from '../apps/api/src/routes/customers.js';
 import {createCatalogRouter} from '../apps/api/src/routes/catalog.js';
 import {createSuppliersRouter} from '../apps/api/src/routes/suppliers.js';
 import {createQuotesRouter} from '../apps/api/src/routes/quotes.js';
+import {createLoadForecastsRouter} from '../apps/api/src/routes/load-forecasts.js';
 import {createCompaniesRouter} from '../apps/api/src/routes/companies.js';
 import {createCompletionRouter} from '../apps/api/src/routes/completion.js';
 import {createOfflineRouter} from '../apps/api/src/routes/offline.js';
@@ -37,7 +38,7 @@ try{
   const auth=(req,res,next)=>{req.auth={issuer:'test',subject:req.get('x-test-user')||'owner'};next();};
   const deps={pool,requireAuth:auth,requireDatabase:()=>((req,res,next)=>next())};
   const qaPort=Number(process.env.QA_PORT||5188);
-  const app=express();app.use(express.json({limit:'4mb'}));app.get('/api/session',auth,(req,res)=>res.json({user:req.auth}));app.get('/api/health',(req,res)=>res.json({database:'configured'}));app.use('/api/sales',createSalesRouter(deps));app.use('/api/operations',createOperationsRouter(deps));app.use('/api/customers',createCustomersRouter(deps));app.use('/api/catalog',createCatalogRouter(deps));app.use('/api/quotes',createQuotesRouter(deps));app.use('/api/company',createCompaniesRouter(deps));app.use('/api/completion',createCompletionRouter(deps));app.use('/api/offline',createOfflineRouter(deps));
+  const app=express();app.use(express.json({limit:'4mb'}));app.get('/api/session',auth,(req,res)=>res.json({user:req.auth}));app.get('/api/health',(req,res)=>res.json({database:'configured'}));app.use('/api/sales',createSalesRouter(deps));app.use('/api/operations',createOperationsRouter(deps));app.use('/api/customers',createCustomersRouter(deps));app.use('/api/catalog',createCatalogRouter(deps));app.use('/api/quotes',createQuotesRouter(deps));app.use('/api/load-forecasts',createLoadForecastsRouter(deps));app.use('/api/company',createCompaniesRouter(deps));app.use('/api/completion',createCompletionRouter(deps));app.use('/api/offline',createOfflineRouter(deps));
   app.post('/api/test/atomic',auth,requireCompanyMembership(pool),idempotencyGuard(pool),async(req,res)=>{await pool.query("INSERT INTO public.financial_entries(company_id,entry_type,title,amount,status,created_by_subject) VALUES($1,'expense','Falha controlada de integridade',1,'pending','owner')",[req.company.company_id]);return req.body.fail?res.status(500).json({error:{message:'Falha controlada'}}):res.status(201).json({saved:true});});
   server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));const base=`http://127.0.0.1:${server.address().port}`;
   async function call(path,body,expected=200,headers={}){const response=await fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();assert.equal(response.status,expected,JSON.stringify(result));return result;}
@@ -157,6 +158,25 @@ try{
   const profileEdit=await fetch(base+`/api/company/admin/profiles/${sharedProfile.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:sharedProfile.name,confirmation:sharedProfile.name,expectedUpdatedAt:sharedProfile.updated_at,permissions:normalizePolicy({})})});assert.equal(profileEdit.status,200);
   await call('/api/sales',null,403,{'x-test-user':'view-only'});
   console.log('✓ Perfil compartilhado altera a permissão efetiva imediatamente; revogação bloqueia a próxima requisição.');
+  // Previsões usam dados sintéticos e banco isolado, inclusive limites e isolamento.
+  await db.query("INSERT INTO public.catalog_items(company_id,item_type,name,unit) SELECT $1,'product','QA produto ' || n,'kg' FROM generate_series(1,105) n",[company]);
+  const catalogFirst=await call('/api/catalog?type=product&status=active&offset=0');
+  const catalogNext=await call('/api/catalog?type=product&status=active&offset=100');
+  assert.equal(catalogFirst.items.length,100);assert(catalogNext.items.length>0);assert(!catalogNext.items.some(p=>catalogFirst.items.some(q=>q.id===p.id)));
+  const forecastItem={productId:product,category:'frutas',quantity:'2.500',unitPrice:'3.45',first:'90',second:'60',third:'25'};
+  const forecast={property:'Propriedade QA',producer:'Produtor QA',date:'2026-11-02',items:[forecastItem]};
+  const saved=(await call('/api/load-forecasts',forecast,201)).forecast;assert.equal(saved.items[0].name,'Banana para compra');
+  assert((await call('/api/load-forecasts')).forecasts.some(f=>f.id===saved.id));
+  assert(!(await call('/api/load-forecasts',null,200,{'x-test-user':'other'})).forecasts.some(f=>f.id===saved.id));
+  await call('/api/load-forecasts',forecast,403,{'x-test-user':'restricted'});
+  await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,first:'101'}]},400);
+  await call('/api/load-forecasts',{...forecast,requireFullPercentage:true},400);
+  await call('/api/load-forecasts',{...forecast,requireFullPercentage:true,items:[{...forecastItem,first:'33.33',second:'33.33',third:'33.34'}]},201);
+  await call('/api/load-forecasts',{...forecast,requireFullPercentage:'yes'},400);
+  await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,quantity:'0'}]},400);
+  await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,productId:randomUUID()}]},400);
+  const longForecast=await call('/api/load-forecasts',{...forecast,items:Array.from({length:101},()=>forecastItem)},201);assert.equal(longForecast.forecast.items.length,101);
+  console.log('✓ Previsões: catálogo paginado, validação, mais de 100 itens, cadastro e isolamento empresarial.');
   app.use('/api/suppliers',createSuppliersRouter(deps));
   if(process.argv.includes('--serve')){
     const webRequire=createRequire(new URL('../apps/web/package.json',import.meta.url));
