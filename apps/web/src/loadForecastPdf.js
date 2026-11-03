@@ -14,16 +14,28 @@ export async function createLoadForecastPdf(forecast, company, {logo:providedLog
   y=drawPdfSection(doc,y,'Dados da carga','',palette);
   line(`Propriedade: ${forecast.property}`,{bold:true});line(`Produtor: ${forecast.producer}`);line(`Data: ${formatPdfDate(forecast.forecast_date)}`);y+=4;
   if(y+20>contentBottom)newPage();y=drawPdfSection(doc,y,'Produtos','',palette);
-  let total=0n;
+  let total=0n, totalWeight=0n, weightsMissing=false;
+  const quantities=new Map(), quality=forecast.items?.[0]?.loadQuality;
+  const thousandths = value => { const [whole,fraction='']=String(value||'0').split('.'); return BigInt(whole||'0')*1000n+BigInt((fraction+'000').slice(0,3)); };
+  const formatThousandths = value => new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(Number(value)/1000);
   for(const [i,item] of (forecast.items||[]).entries()) {
     if(y+32>contentBottom)newPage();
     const cents=forecastLineCents(item);total+=cents;
+    const unit=String(item.unit||'un').trim();quantities.set(unit,(quantities.get(unit)||0n)+thousandths(item.quantity));
+    if(item.weight==null||item.weight==='')weightsMissing=true;else totalWeight+=thousandths(item.weight);
     line(`${i+1}. ${item.name} — ${item.category==='frutas'?'Frutas':'Verduras'}`,{bold:true,size:10});
     line(`Quantidade: ${item.quantity} ${item.unit||''}    |    Valor unitário: ${formatPdfCurrency(item.unitPrice)}    |    Total: ${formatPdfCurrency(Number(cents)/100)}`);
-    line(`Qualidade: primeira ${item.first}%   |   segunda ${item.second}%   |   terceira ${item.third}%`);
+    line(`Peso: ${item.weight==null||item.weight===''?'Não informado':`${item.weight} kg`}`);
+    if(!quality && item.first!=null)line(`Qualidade por produto (registro anterior): primeira ${item.first}% | segunda ${item.second}% | terceira ${item.third}%`);
     y+=3;
   }
-  if(y+18>contentBottom)newPage();y+=3;line(`Valor total da carga: ${formatPdfCurrency(Number(total)/100)}`,{bold:true,size:11});
+  if(y+24>contentBottom)newPage();y+=3;
+  line('Totais da carga',{bold:true,size:11});
+  for(const [unit,quantity] of quantities)line(`Quantidade total: ${formatThousandths(quantity)} ${unit}`);
+  line(`Peso ${weightsMissing ? 'informado' : 'total'}: ${formatThousandths(totalWeight)} kg${weightsMissing?' (há produtos sem peso informado)':''}`);
+  if(quality) line(`Qualidade da carga — primeira: ${quality.first}% | segunda: ${quality.second}% | terceira: ${quality.third}%`);
+  else line('Percentuais anteriores registrados por produto.');
+  line(`Valor total da carga: ${formatPdfCurrency(Number(total)/100)}`,{bold:true,size:11});
   drawPdfFooters(doc,{company,palette,text:company?.document_settings?.footerText||'Documento comercial — não fiscal'});
   return {doc,filename:`previsao-carga-${String(forecast.forecast_date).slice(0,10)}.pdf`};
 }

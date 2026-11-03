@@ -1,43 +1,50 @@
 import { Router } from 'express';
 import { idempotencyGuard, requireAreaPermission, requireCompanyMembership } from '../middleware/neon-auth.js';
 
-function handleError(error, res, action) {
-  console.error('Falha ao ' + action + ' previsão:', error.message);
-  if (error.code === '42P01' && /load_forecasts/i.test(error.message)) return res.status(503).json({ error: { code: 'LOAD_FORECASTS_NOT_INITIALIZED', message: 'A Previsão de Carga ainda não foi instalada no banco de dados. Contate o administrador do sistema.' } });
-  return res.status(500).json({ error: { code: 'LOAD_FORECASTS_ERROR', message: 'Não foi possível acessar as previsões.' } });
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function fail(res,status,message) { return res.status(status).json({error:{message}}); }
+function handleError(error,res,action) { console.error(`Falha ao ${action} previsão:`,error.message); if(error.code==='42P01'||error.code==='42703')return fail(res,503,'A atualização de Previsão de Carga ainda não foi instalada no banco de dados.');return fail(res,500,'Não foi possível acessar as previsões.'); }
+function validate(body) {
+  const {property,producer,date,items,quality,requireFullPercentage=false}=body||{};
+  const validDate=typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&!Number.isNaN(Date.parse(date))&&new Date(`${date}T00:00:00Z`).toISOString().slice(0,10)===date;
+  const decimal=(v,digits,places)=>typeof v==='string'&&new RegExp(`^\\d{1,${digits}}(?:\\.\\d{1,${places}})?$`).test(v);
+  if(typeof property!=='string'||!property.trim()||property.trim().length>200||typeof producer!=='string'||!producer.trim()||producer.trim().length>200||!validDate||!Array.isArray(items)||!items.length||typeof requireFullPercentage!=='boolean')return 'Confira propriedade, produtor, data e itens.';
+  for(const item of items){
+    if(!item||!uuid.test(item.productId||'')||!['frutas','verduras'].includes(item.category)||!decimal(item.quantity,9,3)||Number(item.quantity)<=0||!decimal(item.unitPrice,9,2)||!decimal(item.weight,9,3))return 'Confira produto, categoria, quantidade, preço, peso em kg e percentuais (0 a 100).';
+  }
+  if (!quality || typeof quality !== 'object' || !['first','second','third'].every(k=>decimal(quality[k],3,2)&&Number(quality[k])<=100)) return 'Informe os percentuais gerais da carga entre 0 e 100.';
+  if(requireFullPercentage){const units=v=>{const [a,b='']=v.split('.');return Number(a)*100+Number((b+'00').slice(0,2));};if(['first','second','third'].reduce((sum,k)=>sum+units(quality[k]),0)!==10000)return 'Os percentuais da carga devem somar 100%.';}
+  return null;
 }
-
-export function createLoadForecastsRouter({ pool, requireAuth, requireDatabase }) {
-  const router = Router();
-  router.use(requireAuth, requireDatabase(pool), requireCompanyMembership(pool), requireAreaPermission('commercial'), idempotencyGuard(pool));
-  router.get('/', async (req, res) => {
+export function createLoadForecastsRouter({pool,requireAuth,requireDatabase}) {
+  const router=Router();router.use(requireAuth,requireDatabase(pool),requireCompanyMembership(pool),requireAreaPermission('commercial'),idempotencyGuard(pool));
+  router.param('id',(req,res,next,id)=>uuid.test(id)?next():fail(res,400,'Identificador inválido.'));
+  router.get('/',async(req,res)=>{try{const r=await pool.query('SELECT id,property,producer,forecast_date,items,created_at,is_active,revision,require_full_percentage FROM public.load_forecasts WHERE company_id=$1 ORDER BY forecast_date DESC,created_at DESC',[req.company.company_id]);return res.json({forecasts:r.rows});}catch(e){return handleError(e,res,'listar');}});
+  async function save(req,res) {
+    const error=validate(req.body);if(error)return fail(res,400,error);
+    const {property,producer,date,items,quality,requireFullPercentage=false,revision}=req.body;
+    if(req.params.id&&(!Number.isInteger(revision)||revision<1))return fail(res,400,'Reabra a previsão antes de editar.');
     try {
-      const result = await pool.query('SELECT id, property, producer, forecast_date, items, created_at FROM public.load_forecasts WHERE company_id = $1 ORDER BY forecast_date DESC, created_at DESC', [req.company.company_id]);
-      res.json({ forecasts: result.rows });
-    } catch (error) { return handleError(error, res, 'listar'); }
-  });
-  router.post('/', async (req, res) => {
-    const { property, producer, date, items, requireFullPercentage = false } = req.body || {};
-    const validDate = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
-    const decimal = (value, digits, max) => typeof value === 'string' && new RegExp(`^\\d{1,${digits}}(?:\\.\\d{1,${max}})?$`).test(value);
-    if (typeof property !== 'string' || !property.trim() || property.trim().length > 200 || typeof producer !== 'string' || !producer.trim() || producer.trim().length > 200 || !validDate || !Array.isArray(items) || !items.length) return res.status(400).json({ error: { message: 'Confira propriedade, produtor, data e itens.' } });
-    if (typeof requireFullPercentage !== 'boolean') return res.status(400).json({ error: { message: 'Selecione uma regra válida para os percentuais.' } });
-    for (const item of items) {
-      if (!item || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.productId || '') || !['frutas', 'verduras'].includes(item.category) || !decimal(item.quantity, 9, 3) || Number(item.quantity) <= 0 || !decimal(item.unitPrice, 9, 2) || !['first', 'second', 'third'].every(k => decimal(item[k], 3, 2) && Number(item[k]) <= 100)) return res.status(400).json({ error: { message: 'Confira produto, categoria, quantidade, preço e percentuais (0 a 100).' } });
-      if (requireFullPercentage) {
-        const hundredths = value => { const [whole, fraction = ''] = value.split('.'); return Number(whole) * 100 + Number((fraction + '00').slice(0, 2)); };
-        if (['first', 'second', 'third'].reduce((sum, key) => sum + hundredths(item[key]), 0) !== 10000) return res.status(400).json({ error: { message: 'Os percentuais de cada produto devem somar 100%.' } });
+      const ids=[...new Set(items.map(item=>item.productId))];
+      const result=await pool.query("SELECT id,name,unit FROM public.catalog_items WHERE company_id=$1 AND id=ANY($2::uuid[]) AND item_type='product' AND is_active AND archived_at IS NULL",[req.company.company_id,ids]);
+      const byId=new Map(result.rows.map(p=>[p.id,p]));
+      if(ids.some(id=>!byId.has(id)))return fail(res,400,'Um produto selecionado não está disponível no catálogo.');
+      const saved=items.map(({productId,category,quantity,unitPrice,weight},index)=>({productId,category,quantity,unitPrice,weight,...(index===0?{loadQuality:{first:quality.first,second:quality.second,third:quality.third}}:{}),name:byId.get(productId).name,unit:byId.get(productId).unit}));
+      if(req.params.id){
+        const previous=await pool.query('SELECT items FROM public.load_forecasts WHERE id=$1 AND company_id=$2 AND revision=$3',[req.params.id,req.company.company_id,revision]);
+        if(!previous.rowCount)return fail(res,409,'A previsão mudou ou foi removida. Atualize a lista.');
+        const old=previous.rows[0].items;
+        const snapshot=old[0]?.legacyQualitySnapshot || (!old[0]?.loadQuality ? old.filter(item=>item.first!=null).map(({productId,name,first,second,third})=>({productId,name,first,second,third})) : []);
+        if(snapshot.length)saved[0].legacyQualitySnapshot=snapshot;
       }
-    }
-    try {
-      const ids = [...new Set(items.map(item => item.productId))];
-      const products = await pool.query("SELECT id, name, unit FROM public.catalog_items WHERE company_id = $1 AND id = ANY($2::uuid[]) AND item_type = 'product' AND is_active AND archived_at IS NULL", [req.company.company_id, ids]);
-      const byId = new Map(products.rows.map(p => [p.id, p]));
-      if (ids.some(id => !byId.has(id))) return res.status(400).json({ error: { message: 'Um produto selecionado não está disponível no catálogo.' } });
-      const savedItems = items.map(item => ({ ...item, name: byId.get(item.productId).name, unit: byId.get(item.productId).unit }));
-      const result = await pool.query('INSERT INTO public.load_forecasts (company_id, property, producer, forecast_date, items) VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING *', [req.company.company_id, property.trim(), producer.trim(), date, JSON.stringify(savedItems)]);
-      res.status(201).json({ forecast: result.rows[0] });
-    } catch (error) { return handleError(error, res, 'salvar'); }
-  });
+      let r;
+      if(req.params.id){r=await pool.query('UPDATE public.load_forecasts SET property=$3,producer=$4,forecast_date=$5,items=$6::jsonb,require_full_percentage=$7,revision=revision+1 WHERE id=$1 AND company_id=$2 AND revision=$8 AND is_active RETURNING *',[req.params.id,req.company.company_id,property.trim(),producer.trim(),date,JSON.stringify(saved),requireFullPercentage,revision]);if(!r.rowCount)return fail(res,409,'A previsão mudou, foi desativada ou removida. Atualize a lista antes de tentar novamente.');}
+      else r=await pool.query('INSERT INTO public.load_forecasts (company_id,property,producer,forecast_date,items,require_full_percentage) VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING *',[req.company.company_id,property.trim(),producer.trim(),date,JSON.stringify(saved),requireFullPercentage]);
+      return res.status(req.params.id?200:201).json({forecast:r.rows[0]});
+    }catch(e){return handleError(e,res,'salvar');}
+  }
+  router.post('/',save);router.put('/:id',save);
+  router.patch('/:id/status',async(req,res)=>{const {isActive,revision}=req.body||{};if(typeof isActive!=='boolean'||!Number.isInteger(revision)||revision<1)return fail(res,400,'Situação inválida.');try{const r=await pool.query('UPDATE public.load_forecasts SET is_active=$3,revision=revision+1 WHERE id=$1 AND company_id=$2 AND revision=$4 RETURNING *',[req.params.id,req.company.company_id,isActive,revision]);if(!r.rowCount)return fail(res,409,'A previsão mudou ou foi removida. Atualize a lista.');return res.json({forecast:r.rows[0]});}catch(e){return handleError(e,res,'alterar');}});
+  router.delete('/:id',async(req,res)=>{if(req.company.role!=='owner')return fail(res,403,'Somente o responsável pela empresa pode excluir permanentemente.');const {confirmation,revision}=req.body||{};if(confirmation!=='EXCLUIR'||!Number.isInteger(revision)||revision<1)return fail(res,400,'Confirme a exclusão digitando EXCLUIR.');try{const r=await pool.query('DELETE FROM public.load_forecasts WHERE id=$1 AND company_id=$2 AND revision=$3 RETURNING id',[req.params.id,req.company.company_id,revision]);if(!r.rowCount)return fail(res,409,'A previsão mudou ou foi removida. Atualize a lista.');return res.json({deleted:true});}catch(e){return handleError(e,res,'excluir');}});
   return router;
 }
