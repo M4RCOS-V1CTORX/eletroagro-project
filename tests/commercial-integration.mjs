@@ -175,6 +175,13 @@ try{
   await call('/api/load-forecasts',{...forecast,requireFullPercentage:'yes'},400);
   await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,quantity:'0'}]},400);
   await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,productId:randomUUID()}]},400);
+  const grading={first:{boxes:'33',weight:'1624'},second:{boxes:'53',weight:'2546'},third:{boxes:'24',weight:'1152'}};
+  const graded=(await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,weight:'5322'}],grading,transport:{vehicle:'Truck',driver:'Teste',plate:'ABC1234',bunches:'400'}},201)).forecast;
+  assert.equal(graded.items[0].loadGrading.second.weight,'2546');
+  await call('/api/load-forecasts',{...forecast,grading,items:[forecastItem]},400);
+  const measured={first:{boxes:'2',weight:'100',weighingsText:'48\n52'},second:{boxes:'0',weight:'0'},third:{boxes:'0',weight:'0'}};
+  await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,weight:'100'}],grading:measured},201);
+  await call('/api/load-forecasts',{...forecast,items:[{...forecastItem,weight:'100'}],grading:{...measured,first:{...measured.first,boxes:'3'}}},400);
   const longForecast=await call('/api/load-forecasts',{...forecast,items:Array.from({length:101},()=>forecastItem)},201);assert.equal(longForecast.forecast.items.length,101);
   console.log('✓ Previsões: catálogo paginado, validação, mais de 100 itens, cadastro e isolamento empresarial.');
   const manage=async(path,method,body,expected,headers={})=>{const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json',...headers},body:JSON.stringify(body)});const data=await response.json();assert.equal(response.status,expected,JSON.stringify(data));return data;};

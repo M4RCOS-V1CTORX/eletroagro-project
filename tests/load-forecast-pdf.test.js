@@ -28,3 +28,17 @@ test('PDF soma três itens de 100 kg e mostra apenas percentuais gerais', async 
   const {doc}=await createLoadForecastPdf(forecast,{name:'Empresa',document_settings:{}},{logo:null});const pdf=doc.output();
   assert(pdf.includes('Quantidade total: 300 kg'));assert(pdf.includes('Peso total: 300 kg'));assert(pdf.includes('primeira: 50%'));assert(pdf.includes('segunda: 30%'));assert(pdf.includes('terceira: 20%'));assert(!pdf.includes('Soma dos percentuais'));
 });
+
+test('PDF reproduz os totais e percentuais de pesagem por qualidade', async () => {
+ const grading={first:{boxes:'33',weight:'1624'},second:{boxes:'53',weight:'2546'},third:{boxes:'24',weight:'1152'}};
+ const item={name:'Banana',category:'frutas',quantity:'110',unit:'cx',weight:'5322',unitPrice:'0',loadGrading:grading,loadTransport:{vehicle:'Truck',driver:'Motorista',plate:'ABC1234',bunches:'400'}};
+ const {doc}=await createLoadForecastPdf({property:'Fazenda',producer:'Produtor',forecast_date:'2026-11-02',items:[item]},{name:'Empresa',document_settings:{}},{logo:null});
+ const pdf=doc.output();for(const expected of ['30,51%','47,84%','21,65%','Total de caixas: 110','Cachos colhidos: 400','13,31 kg'])assert(pdf.includes(expected),expected);
+});
+
+test('PDF inclui pesagens individuais quando informadas', async () => {
+ const grading={first:{boxes:'2',weight:'100',weighingsText:'48\n52'},second:{boxes:'0',weight:'0'},third:{boxes:'0',weight:'0'}};
+ const item={name:'Banana',category:'frutas',quantity:'2',unit:'cx',weight:'100',unitPrice:'0',loadGrading:grading};
+ const {doc}=await createLoadForecastPdf({property:'Fazenda',producer:'Produtor',forecast_date:'2026-11-02',items:[item]},{name:'Empresa',document_settings:{}},{logo:null});
+ assert(doc.output().includes('48 / 52 kg'));
+});
