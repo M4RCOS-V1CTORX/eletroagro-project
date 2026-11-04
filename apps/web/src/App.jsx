@@ -1,7 +1,7 @@
 import {canAction} from '../../../shared/access-policy.js';
 import ModuleBoundary from './ModuleBoundary.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Banknote, Package, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Banknote, Package, QrCode, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 import OfflineTools from './OfflineTools.jsx';
@@ -23,6 +23,7 @@ const AuditPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({
 const CompanyAccessPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.CompanyAccessPage })));
 const ReportsPage = lazy(() => import('./ReportsPage.jsx'));
 const ReceiptsPage = lazy(() => import('./ReceiptsPage.jsx'));
+const QRCodePage = lazy(() => import('./QRCodePage.jsx'));
 
 const navigation = [
   { label: 'Visão geral', icon: LayoutDashboard, key: 'overview' },
@@ -33,6 +34,7 @@ const navigation = [
   { label: 'Vendas', icon: CircleDollarSign, key: 'sales' },
   { label: 'Despesas', icon: ReceiptText, key: 'expenses' },
   { label: 'Estoque', icon: Package, key: 'stock' },
+  { label: 'QR Code', icon: QrCode, key: 'qrcode' },
   { label: 'Contas a pagar e a receber', icon: Banknote, key: 'accounts' },
   { label: 'Financeiro', icon: ChartNoAxesCombined, key: 'finance' },
   { label: 'Recibos', icon: ReceiptText, key: 'receipts' },
@@ -44,14 +46,14 @@ const navigation = [
 const desktopNavigationGroups = [
   { label: 'PAINEL', keys: ['overview'] },
   { label: 'COMERCIAL', keys: ['customers', 'catalog', 'suppliers', 'quotes', 'sales'] },
-  { label: 'OPERAÇÃO', keys: ['expenses', 'stock', 'agenda'] },
+  { label: 'OPERAÇÃO', keys: ['expenses', 'stock', 'agenda', 'qrcode'] },
   { label: 'GESTÃO', keys: ['accounts','finance', 'receipts', 'reports', 'audit'] },
 ];
 
-const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', expenses: 'Despesas', stock: 'Estoque', accounts:'Contas a pagar e a receber', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações' };
+const pageLabels = { overview: 'Visão geral', customers: 'Clientes', catalog: 'Produtos e serviços', suppliers: 'Fornecedores', quotes: 'Orçamentos', sales: 'Vendas', expenses: 'Despesas', stock: 'Estoque', accounts:'Contas a pagar e a receber', finance: 'Financeiro', receipts: 'Recibos', reports: 'Relatórios', agenda: 'Agenda', audit: 'Histórico', settings: 'Configurações', qrcode: 'QR Code' };
 const mobilePrimaryKeys = ['overview', 'customers', 'quotes', 'sales'];
 const mobileMoreGroups = [
-  { label: 'Operação', keys: ['expenses', 'accounts', 'stock', 'finance', 'agenda'] },
+  { label: 'Operação', keys: ['expenses', 'accounts', 'stock', 'finance', 'agenda', 'qrcode'] },
   { label: 'Cadastros', keys: ['catalog', 'suppliers'] },
   { label: 'Gestão', keys: ['receipts', 'reports', 'audit', 'settings'] },
 ];
@@ -333,7 +335,7 @@ export default function App() {
   const syncLabel = !online ? 'Sem conexão' : `${pendingSync} pendente(s)`;
   const SyncIcon = online ? Wifi : WifiOff;
   const permissionArea = { customers: 'commercial', catalog: 'commercial', suppliers: 'commercial', quotes: 'commercial', sales: 'commercial', expenses: 'finance', stock: 'operations', agenda: 'operations', accounts:'finance', finance: 'finance', receipts: 'finance', reports: 'reports', audit: 'audit' };
-  const canUsePage = key => key==='accounts' ? ['payables','receivables','finance'].some(m=>canAction(user.company,m)) : key==='settings' ? ['company','users'].some(m=>canAction(user.company,m)) : canAction(user.company,key==='overview'?'dashboard':key);
+  const canUsePage = key => key==='qrcode' ? true : key==='accounts' ? ['payables','receivables','finance'].some(m=>canAction(user.company,m)) : key==='settings' ? ['company','users'].some(m=>canAction(user.company,m)) : canAction(user.company,key==='overview'?'dashboard':key);
   async function installApplication() { if (!installPrompt) return; await installPrompt.prompt(); await installPrompt.userChoice; setInstallPrompt(null); }
 
   return (
@@ -368,7 +370,7 @@ export default function App() {
         </header>
         <OfflineTools/>
         <ModuleBoundary page={page}><Suspense fallback={<div className="app-module-loading">Abrindo {pageLabels[page]?.toLowerCase() || 'módulo'}…</div>}>
-          {!canUsePage(page)?<section className="workspace-page"><h1>Acesso restrito</h1><p>Seu perfil não permite acessar esta tela. Selecione uma opção disponível no menu.</p></section>:page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'expenses' ? <ExpensesPage /> : page === 'stock' ? <StockPage /> : page === 'accounts' ? <AccountsPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
+          {!canUsePage(page)?<section className="workspace-page"><h1>Acesso restrito</h1><p>Seu perfil não permite acessar esta tela. Selecione uma opção disponível no menu.</p></section>:page === 'customers' ? <CustomersPage onCompanyChange={setCompanyName} /> : page === 'catalog' ? <CatalogPage /> : page === 'quotes' ? <QuotesPage /> : page === 'suppliers' ? <SuppliersPage /> : page === 'sales' ? <SalesPage /> : page === 'expenses' ? <ExpensesPage /> : page === 'stock' ? <StockPage /> : page === 'qrcode' ? <QRCodePage /> : page === 'accounts' ? <AccountsPage /> : page === 'finance' ? <FinancePage /> : page === 'receipts' ? <ReceiptsPage /> : page === 'reports' ? <ReportsPage /> : page === 'agenda' ? <AgendaPage /> : page === 'audit' ? <AuditPage /> : page === 'settings' ? <SettingsPage onCompanyChange={setCompanyName} onCompanyDeleted={async () => { await forgetOfflineSession(); setApiContext(null); setCompanyName(''); setUser((current) => ({ ...current, company: null })); setPage('customers'); }} /> : <OverviewPage onNavigate={key=>{if(canUsePage(key))setPage(key);}} canUsePage={canUsePage} />}
         </Suspense></ModuleBoundary>
       </main>
       {mobileMoreOpen && <>
