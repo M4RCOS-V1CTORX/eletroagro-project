@@ -18,6 +18,40 @@ Sistema web de gestão para serviços elétricos. O frontend e a API estão publ
 - `gabarito do sistema.txt`: documento mestre de requisitos.
 - `ARQUITETURA-INICIAL.md`: proposta técnica e modelo de dados para revisão.
 
+## Onde colocar cada responsabilidade
+
+A organização abaixo descreve os caminhos existentes. Antes de criar uma pasta ou
+mover arquivos, confira os módulos relacionados e reutilize o padrão atual.
+
+| Responsabilidade | Local e exemplos |
+| --- | --- |
+| Inicialização e navegação da interface | `apps/web/src/main.jsx` e `apps/web/src/App.jsx` |
+| Páginas e componentes React | `apps/web/src/*Page.jsx`, `OperationsPages.jsx`, `WorkspaceUI.jsx` e componentes relacionados |
+| Hooks (funções que reutilizam comportamento do React) | `apps/web/src/useDialogAccessibility.js` e `useSyncRefresh.js` |
+| Comunicação com a API e autenticação | `apps/web/src/apiClient.js`, `apiUrl.js` e `authClient.js` |
+| Armazenamento e sincronização offline | `apps/web/src/offline*.js` e `OfflineTools.jsx` |
+| PDFs e exportações | `apps/web/src/*Pdf.js`, `pdfDesign.js` e `csv.js` |
+| Estilos da interface | `apps/web/src/styles.css` e arquivos CSS específicos dos módulos |
+| Recursos públicos e instalação PWA | `apps/web/public/` |
+| Rotas HTTP do servidor | `apps/api/src/routes/` |
+| Validação de acesso às requisições | `apps/api/src/middleware/` |
+| Serviços e funções de apoio do servidor | `apps/api/src/services/` e `apps/api/src/lib/` |
+| Migrações e ferramentas do banco | `apps/api/src/db/` |
+| Regras compartilhadas entre interface e servidor | `shared/` |
+| Testes automatizados e verificações locais | `tests/` |
+
+Os arquivos em `tmp/` e `entrega/` são locais e ignorados pelo Git. Não coloque
+código, testes ou documentação permanente nessas pastas. Os documentos existentes
+na raiz e os materiais já versionados em `output/` continuam nos caminhos atuais.
+
+### Documentação por assunto
+
+- Requisitos e arquitetura: `gabarito do sistema.txt` e `ARQUITETURA-INICIAL.md`.
+- Operação e despesas: `OPERACAO.md` e `DESPESAS.md`.
+- Modo offline: `GUIA-OFFLINE.md`.
+- Publicação e autenticação: `PUBLICACAO.md`.
+- Histórico técnico e continuidade: `EVOLUCAO-COMERCIAL.md`, `CONTINUIDADE.md` e `ENTREGA-REVISAO-28-10-2026.md`.
+
 ## Pré-requisitos
 
 - Node.js 20 ou superior.
