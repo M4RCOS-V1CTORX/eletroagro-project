@@ -42,7 +42,7 @@ export function createOfflineRouter({pool,requireAuth,requireDatabase}){
       data.orders=await table('service_orders',can('operations'));const orderItems=await table('service_order_items',can('operations'));
       const itemsByOrder=group(orderItems,'order_id');for(const order of data.orders)order.items=itemsByOrder.get(order.id)||[];
       data.attachments=can('operations')?await rows('SELECT id,service_order_id,file_name,mime_type,byte_size,caption,created_at FROM public.service_order_attachments WHERE company_id=$1 LIMIT 20001'):[];
-      data.activity=can('audit')?await rows('SELECT * FROM public.audit_logs WHERE company_id=$1 ORDER BY created_at DESC LIMIT 50'):[];
+      data.activity=can('audit')?await rows(`SELECT l.*, actor.name AS actor_name FROM public.audit_logs l LEFT JOIN LATERAL (SELECT COALESCE(NULLIF(trim(m.display_name),''),NULLIF(trim(m.email),'')) AS name FROM public.company_memberships m WHERE m.company_id=l.company_id AND m.auth_subject=l.actor_subject ORDER BY m.is_active DESC,m.created_at LIMIT 1) actor ON true WHERE l.company_id=$1 ORDER BY l.created_at DESC LIMIT 50`):[];
       if(req.company.permissions?.version===2){
         const view=module=>canAction(req.company,module,'view');
         for(const [key,module] of Object.entries({customers:'customers',catalog:'catalog',suppliers:'suppliers',sales:'sales',quotes:'quotes',transportProfiles:'sales',receipts:'receipts',purchases:'purchases',movements:'stock',appointments:'agenda',orders:'orders',attachments:'orders',activity:'audit'}))if(!view(module))data[key]=[];

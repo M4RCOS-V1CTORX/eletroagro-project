@@ -5,7 +5,7 @@ import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAx
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 import OfflineTools from './OfflineTools.jsx';
-import { apiRequest,setApiContext,offlineSession,rememberOfflineSession,forgetOfflineSession,offlineLogoutPending,clearOfflineLogout,prepareOfflineState, flushOfflineQueue, offlineQueueCount,offlineStatus } from './apiClient.js';
+import { apiRequest,setApiContext,syncApiContext,offlineSession,rememberOfflineSession,forgetOfflineSession,offlineLogoutPending,clearOfflineLogout,prepareOfflineState, flushOfflineQueue, offlineQueueCount,offlineStatus } from './apiClient.js';
 import { useDialogAccessibility } from './useDialogAccessibility.js';
 const CustomersPage = lazy(() => import('./CustomersPage.jsx'));
 const CatalogPage = lazy(() => import('./CatalogPage.jsx'));
@@ -78,7 +78,6 @@ async function verifyApiSession(sessionResult) {
   });
   const companyBody = await companyResponse.json().catch(() => ({}));
   if (!companyResponse.ok && companyResponse.status !== 503) throw new Error(companyBody.error?.message || 'Não foi possível consultar o espaço da empresa.');
-  setApiContext({...body.user,companyId:companyBody.company?.id});
   return { ...body.user, company: companyBody.company || null, databaseUnavailable: companyResponse.status === 503 };
 }
 
@@ -101,7 +100,7 @@ export default function App() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [reminderCount, setReminderCount] = useState(0);
   useEffect(()=>{
-    setApiContext(user?.company?{issuer:user.issuer,subject:user.subject,companyId:user.company.id}:null);
+    syncApiContext(user?.company?{issuer:user.issuer,subject:user.subject,companyId:user.company.id}:null);
     if(!user?.company)return;
     rememberOfflineSession(user).catch(error=>setAuthError(error.message));
     offlineQueueCount().then(setPendingSync).catch(()=>{});
@@ -160,7 +159,7 @@ export default function App() {
       const restoreOffline=async()=>{
         if(await offlineLogoutPending())return false;
         const saved=await offlineSession();
-        if(!saved?.company?.id)return false;
+        if(!saved?.company?.id||!active)return false;
         setApiContext({issuer:saved.issuer,subject:saved.subject,companyId:saved.company.id});
         if(!(await offlineStatus()).prepared)return false;
         if(active){setUser(saved);setCompanyName(saved.company.name);}
@@ -186,7 +185,7 @@ export default function App() {
         const result=await readAuthSessionWithRetry();
         if(result.data?.session&&result.data?.user){
           const verifiedUser=await verifyApiSession(result);
-          if(active){setUser(verifiedUser);setCompanyName(verifiedUser.company?.name||'');}
+          if(active){setApiContext(verifiedUser.company?{issuer:verifiedUser.issuer,subject:verifiedUser.subject,companyId:verifiedUser.company.id}:null);setUser(verifiedUser);setCompanyName(verifiedUser.company?.name||'');}
         }else if(!navigator.onLine||!(await apiReachable()))await restoreOffline();
       } catch(error) {
         if(!navigator.onLine||!(await apiReachable())){
@@ -279,6 +278,7 @@ export default function App() {
         }
         throw verificationError;
       }
+      setApiContext(verifiedUser.company?{issuer:verifiedUser.issuer,subject:verifiedUser.subject,companyId:verifiedUser.company.id}:null);
       setUser(verifiedUser);
       setCompanyName(verifiedUser.company?.name || '');
     } catch (error) {
@@ -328,7 +328,7 @@ export default function App() {
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
   if (!user) return <AuthScreen view={authView} isSignUp={isSignUp} onToggleMode={(nextMode) => { setAuthView('access'); setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onForgot={() => { setAuthView('forgot'); setAuthError(''); setAuthNotice(''); }} onBack={() => { setAuthView('access'); setIsSignUp(false); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} onRecovery={handlePasswordRecovery} onReset={handlePasswordReset} busy={authBusy} error={authError} notice={authNotice} />;
-  if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
+  if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { syncApiContext({issuer:user.issuer,subject:user.subject,companyId:company.id}); setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
   const syncLabel = !online ? 'Sem conexão' : `${pendingSync} pendente(s)`;
   const SyncIcon = online ? Wifi : WifiOff;

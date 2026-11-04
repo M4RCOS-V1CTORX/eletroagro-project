@@ -48,3 +48,36 @@ test('fila só remove após confirmação e evita duas sincronizações simultâ
 test('anexos exigem conteúdo, tipo e tamanho reais coerentes',()=>{
   const bytes=Buffer.from('%PDF-1.4\nTest');const attachment={mimeType:'application/pdf',byteSize:bytes.length,contentData:`data:application/pdf;base64,${bytes.toString('base64')}`};assert(validateAttachment(attachment));assert(!validateAttachment({...attachment,byteSize:1}));assert(!validateAttachment({...attachment,mimeType:'image/png'}));assert(!validateAttachment({...attachment,contentData:'javascript:alert(1)'}));
 });
+
+test('histórico offline filtra período, tipo e ação apenas entre dados preparados',()=>{
+ const data=offlineFixture();data.activity=[
+  {id:'1',action:'created',entity_type:'sale',actor_subject:'equipe',summary:{customerName:'Cliente Teste'},created_at:'2026-11-02T02:00:00Z'},
+  {id:'2',action:'cancelled',entity_type:'sale',actor_subject:'equipe',summary:{reason:'Ajuste'},created_at:'2026-11-02T15:00:00Z'},
+  {id:'3',action:'created',entity_type:'purchase',actor_subject:'equipe',summary:{},created_at:'2026-11-02T16:00:00Z'},
+ ];
+ const result=readOffline(data,'/api/operations/audit?from=2026-11-02&to=2026-11-02&entity=sale&action=cancelled');
+ assert.equal(result.offline,true);assert.equal(result.total,1);assert.equal(result.activity[0].id,'2');
+ assert.equal(readOffline(data,'/api/operations/audit?to=2026-11-01').activity[0].id,'1');
+ data.access.audit=false;assert.throws(()=>readOffline(data,'/api/operations/audit'),/acesso/);
+});
+
+test('estoque inicial offline cria entrada rastreável e respeita permissões e precisão',()=>{
+ const data=offlineFixture(), body={itemType:'product',name:'Produto novo',unit:'kg',minimumStock:'2',initialStock:'12.345',costPrice:'1',salePrice:'2'};
+ const outcome=applyOfflineCommand(data,cmd('/api/catalog',body));const id=outcome.result.item.id;
+ assert.equal(outcome.data.stock.find(row=>row.id===id).stock,'12.345');assert.equal(outcome.data.movements[0].reason,'Estoque inicial');assert.equal(outcome.data.movements[0].catalog_item_id,id);assert.equal(data.stock.length,1);
+ assert.throws(()=>applyOfflineCommand(data,cmd('/api/catalog',{...body,initialStock:'1.0001'})),/quantidades/);
+ assert.throws(()=>applyOfflineCommand(data,cmd('/api/catalog',{...body,initialStock:'-1'})),/quantidades/);
+ assert.throws(()=>applyOfflineCommand(data,cmd('/api/catalog',{...body,itemType:'service'})),/produtos/);
+ const limited=offlineFixture();limited.company.role='member';limited.company.permissions=normalizePolicy({modules:{catalog:{view:true,create:true}}});assert.throws(()=>applyOfflineCommand(limited,cmd('/api/catalog',body)),/estoque inicial/);
+ const noStock=applyOfflineCommand(limited,cmd('/api/catalog',{...body,initialStock:'0'}));assert.equal(noStock.data.stock.length,1);
+ const blank=applyOfflineCommand(data,cmd('/api/catalog',{...body,initialStock:''}));assert.equal(blank.data.stock.length,1);
+ assert.throws(()=>applyOfflineCommand(data,cmd('/api/catalog/00000000-0000-4000-8000-000000000001',{initialStock:'2'},'PATCH')),/movimentação/);
+});
+
+test('produto criado offline pode ser vendido e usa o saldo inicial',()=>{
+ const command=cmd('/api/catalog',{itemType:'product',name:'Banana nova',unit:'kg',initialStock:'12.345',minimumStock:'2',costPrice:'1',salePrice:'4'});
+ const created=applyOfflineCommand(offlineFixture(),command),id=created.result.item.id;
+ const sold=applyOfflineCommand(created.data,cmd('/api/sales',{...saleBody,items:[{catalogItemId:id,quantity:'2.500',unitPrice:'4.00'}]}));
+ assert.equal(sold.data.stock.find(item=>item.id===id).stock,'9.845');
+ assert.equal(created.data.stock.find(item=>item.id===id).stock,'12.345');
+});

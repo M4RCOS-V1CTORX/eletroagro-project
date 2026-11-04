@@ -65,7 +65,7 @@ export async function acknowledge(context,row,response){
     Object.assign(record.idMap,aliases);record.data=replaceValues(record.data,aliases);
     if(response.sale?.id){const sale=record.data.sales.find(r=>r.id===response.sale.id);if(sale){sale.is_provisional=false;sale.sale_number=response.sale.sale_number??sale.sale_number;sale.sale_year=response.sale.sale_year??sale.sale_year;}}
     if(response.receipt?.id){const receipt=record.data.receipts.find(r=>r.id===response.receipt.id);if(receipt)Object.assign(receipt,response.receipt,{is_provisional:false,sync_status:'confirmed'});}
-    for(const collection of ['customers','catalog','suppliers','transportProfiles','sales','entries','purchases','appointments'])for(const entity of record.data[collection]||[])if(entity.local_operation_id===row.id)entity.sync_status='confirmed';
+    for(const collection of ['customers','catalog','suppliers','transportProfiles','sales','entries','purchases','appointments','movements'])for(const entity of record.data[collection]||[])if(entity.local_operation_id===row.id)entity.sync_status='confirmed';
     record.confirmed ||= {};record.confirmed[row.id]=response;const keys=Object.keys(record.confirmed);if(keys.length>100)delete record.confirmed[keys[0]];
     record.revision=(record.revision||0)+1;
     await request(s('snapshots').put(record));await request(s('pending-requests').delete(row.id));

@@ -62,9 +62,18 @@ export function applyOfflineCommand(source,command){
     if(fields.email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email))throw new Error('Informe um e-mail válido.');
     if(fields.payment_term_days!=null&&fields.payment_term_days!==''&&(!Number.isInteger(Number(fields.payment_term_days))||Number(fields.payment_term_days)<0||Number(fields.payment_term_days)>3650))throw new Error('Prazo de pagamento inválido.');
     if(group==='catalog')for(const field of ['cost_price','sale_price','minimum_stock'])if(fields[field]!=null)units(fields[field],field==='minimum_stock'?3:2);
+    if(group==='catalog'&&method==='PATCH'&&Object.hasOwn(body,'initialStock'))throw new Error('Para alterar o saldo, registre uma movimentação em Estoque.');
     if(method==='PATCH'){const entry=find(data[group],match[2],'Cadastro');Object.assign(entry,fields,{sync_status:'pending',updated_at:stamp});return{data,result:{[label]:entry},bindings};}
     if(group==='catalog'&&!['product','service'].includes(fields.item_type))throw new Error('Selecione produto ou serviço.');
-    const entry={id:bind('entity',`${label}.id`),is_active:true,archived_at:null,...fields,...meta};data[group].push(entry);return{data,result:{[label]:entry},bindings};
+    let initial=0n;
+    if(group==='catalog'){
+      initial=units(body.initialStock===''?'0':(body.initialStock??'0'),3);delete fields.initialStock;
+      if(initial>0n&&fields.item_type!=='product')throw new Error('Estoque inicial só pode ser informado para produtos.');
+      if(initial>0n&&(!canAction(data.company,'stock','create')||!can('operations')))throw new Error('Seu perfil não permite registrar estoque inicial.');
+    }
+    const entry={id:bind('entity',`${label}.id`),is_active:true,archived_at:null,...fields,...meta};data[group].push(entry);
+    if(group==='catalog'&&initial>0n){data.stock.push({id:entry.id,name:entry.name,unit:entry.unit||'un',minimum_stock:entry.minimum_stock||'0',movements:1,stock:decimal(initial,3)});data.movements.unshift({id:id('initialMovement'),catalog_item_id:entry.id,item_name:entry.name,unit:entry.unit||'un',direction:'in',quantity:decimal(initial,3),reason:'Estoque inicial',created_at:stamp,sync_status:'pending',local_operation_id:command.id});}
+    return{data,result:{[label]:entry},bindings};
   }
   if(path==='/api/sales/transport-profiles'&&method==='POST'){
     authorize('commercial');const entry={id:bind('entity','profile.id'),vehicle:requireText(body.vehicle,'veículo',120),plate:String(body.plate||'').trim().toUpperCase(),driver:String(body.driver||'').trim()};if(entry.plate.length>12||entry.driver.length>120)throw new Error('Confira placa e motorista.');data.transportProfiles.push(entry);return{data,result:{profile:entry},bindings};

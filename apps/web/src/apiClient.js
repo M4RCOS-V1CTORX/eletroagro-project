@@ -6,6 +6,13 @@ import {ensureOfflineShell} from './offlineShell.js';
 
 let currentContext=null;
 export function setApiContext(context){currentContext=context?{...context,apiUrl}:null;}
+// Reconcile React state without replacing an already verified session object.
+// Explicit setApiContext calls still create a new session generation.
+export function syncApiContext(context){
+  if(!context){if(currentContext)setApiContext(null);return;}
+  if(currentContext?.issuer===context.issuer&&currentContext?.subject===context.subject&&currentContext?.companyId===context.companyId)return;
+  setApiContext(context);
+}
 function assertSameContext(context){
   if(currentContext!==context){const error=new Error('A sessão mudou. Reabra a tela na conta atual. Os dados permanecem na conta original.');error.code='SESSION_CONTEXT_CHANGED';throw error;}
 }

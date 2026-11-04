@@ -2,8 +2,9 @@ import {useSyncRefresh} from './useSyncRefresh.js';
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, Boxes, CirclePlus, Clock3, LoaderCircle, Package, Pencil, Search, Wrench, X } from 'lucide-react';
 import { apiRequest } from './apiClient.js';
+import { canAction } from '../../../shared/access-policy.js';
 
-const emptyItem = { itemType: 'product', code: '', name: '', description: '', category: '', unit: 'un', costPrice: '0', salePrice: '0', minimumStock: '0', estimatedMinutes: '' };
+const emptyItem = { itemType: 'product', code: '', name: '', description: '', category: '', unit: 'un', costPrice: '0', salePrice: '0', minimumStock: '0', initialStock: '0', estimatedMinutes: '' };
 
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -16,6 +17,7 @@ export default function CatalogPage() {
   const [appliedQuery, setAppliedQuery] = useState('');
   const [items, setItems] = useState([]);
   const [companyRole, setCompanyRole] = useState('member');
+  const [company, setCompany] = useState(null);
   const [total, setTotal] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +41,7 @@ export default function CatalogPage() {
   }, [type, status, appliedQuery]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
-  useEffect(() => { apiRequest('/api/company/me').then((result) => setCompanyRole(result.company?.role || 'member')).catch(() => {}); }, []);
+  useEffect(() => { apiRequest('/api/company/me').then((result) => (setCompany(result.company || null), setCompanyRole(result.company?.role || 'member'))).catch(() => {}); }, []);
 
   function openNew() {
     setError(''); setEditing(null); setDraft({ ...emptyItem, itemType: type });
@@ -64,6 +66,7 @@ export default function CatalogPage() {
       minimumStock: draft.itemType === 'product' ? Number(draft.minimumStock || 0) : 0,
       estimatedMinutes: draft.itemType === 'service' && draft.estimatedMinutes ? Number(draft.estimatedMinutes) : null,
     };
+    if (editing || draft.itemType !== 'product') delete payload.initialStock;
     try {
       const result=await apiRequest(editing ? `/api/catalog/${editing.id}` : '/api/catalog', {
         method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload),
@@ -148,7 +151,7 @@ export default function CatalogPage() {
           <label>Código interno<input maxLength="40" value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} placeholder="Opcional" /></label>
           <label>Categoria<input maxLength="100" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Ex.: Elétrica" /></label>
           <label>Unidade de medida<input maxLength="20" required value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} placeholder="un, m, h…" /></label>
-          {draft.itemType === 'product' && <><label>Custo de aquisição (R$)<input type="number" min="0" step="0.01" value={draft.costPrice} onChange={(event) => setDraft({ ...draft, costPrice: event.target.value })} /></label><label>Estoque mínimo<input type="number" min="0" step="0.001" value={draft.minimumStock} onChange={(event) => setDraft({ ...draft, minimumStock: event.target.value })} /></label></>}
+          {draft.itemType === 'product' && <><label>Custo de aquisição (R$)<input type="number" min="0" step="0.01" value={draft.costPrice} onChange={(event) => setDraft({ ...draft, costPrice: event.target.value })} /></label><label>Estoque mínimo<input type="number" min="0" step="0.001" value={draft.minimumStock} onChange={(event) => setDraft({ ...draft, minimumStock: event.target.value })} /></label>{!editing && company && canAction(company, 'stock', 'create') && <label>Estoque inicial<input type="number" min="0" max="999999999.999" step="0.001" value={draft.initialStock} onChange={(event) => setDraft({ ...draft, initialStock: event.target.value })} /><small>Quantidade já disponível; será registrada como entrada.</small></label>}</>}
           <label>Preço sugerido (R$)<input type="number" min="0" step="0.01" value={draft.salePrice} onChange={(event) => setDraft({ ...draft, salePrice: event.target.value })} /></label>
           {draft.itemType === 'service' && <label>Tempo estimado (minutos)<input type="number" min="1" step="1" value={draft.estimatedMinutes} onChange={(event) => setDraft({ ...draft, estimatedMinutes: event.target.value })} placeholder="Opcional" /> </label>}
           <label className="field-wide">Descrição<textarea rows="3" maxLength="3000" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>

@@ -273,6 +273,16 @@ export function createOperationsRouter({ pool, requireAuth, requireDatabase }) {
     }catch(error){await client.query('ROLLBACK').catch(()=>{});return fail(res,error,'registrar a compra');}finally{client.release();}
   });
 
-  router.get('/audit',async(req,res)=>{const q=req.query;const offset=Number(q.offset||0);if(!Number.isSafeInteger(offset)||offset<0||q.from&&!validDate(q.from)||q.to&&!validDate(q.to))return res.status(400).json({error:{message:'Filtros inválidos.'}});try{const result=await pool.query(`SELECT id,actor_subject,action,entity_type,entity_id,summary,created_at,COUNT(*) OVER()::int AS total_count FROM public.audit_logs WHERE company_id=$1 AND ($2='' OR action ILIKE '%'||$2||'%' OR actor_subject ILIKE '%'||$2||'%' OR summary::text ILIKE '%'||$2||'%') AND ($3::date IS NULL OR (created_at AT TIME ZONE 'America/Bahia')::date>=$3) AND ($4::date IS NULL OR (created_at AT TIME ZONE 'America/Bahia')::date<=$4) AND ($5='' OR entity_type=$5) AND ($6='' OR action=$6) ORDER BY created_at ${q.order==='asc'?'ASC':'DESC'},id LIMIT 50 OFFSET $7`,[companyId(req),String(q.q||'').slice(0,100),q.from||null,q.to||null,String(q.entity||''),String(q.action||''),offset]);return res.json({activity:result.rows,total:result.rows[0]?.total_count||0});}catch(error){return fail(res,error,'consultar o histórico');}});
+  router.get('/audit',async(req,res)=>{
+    const q=req.query,offset=Number(q.offset||0);
+    if(!Number.isSafeInteger(offset)||offset<0||q.from&&!validDate(q.from)||q.to&&!validDate(q.to)||q.from&&q.to&&q.from>q.to)return res.status(400).json({error:{message:'Confira o período e os filtros.'}});
+    const params=[companyId(req),String(q.q||'').trim().slice(0,100),q.from||null,q.to||null,String(q.entity||''),String(q.action||'')];
+    const where=`FROM public.audit_logs l LEFT JOIN LATERAL (SELECT COALESCE(NULLIF(trim(m.display_name),''),NULLIF(trim(m.email),'')) AS name FROM public.company_memberships m WHERE m.company_id=l.company_id AND m.auth_subject=l.actor_subject ORDER BY m.is_active DESC,m.created_at LIMIT 1) actor ON true WHERE l.company_id=$1 AND ($2='' OR l.action ILIKE '%'||$2||'%' OR l.entity_type ILIKE '%'||$2||'%' OR l.actor_subject ILIKE '%'||$2||'%' OR COALESCE(actor.name,'') ILIKE '%'||$2||'%' OR l.summary::text ILIKE '%'||$2||'%') AND ($3::date IS NULL OR (l.created_at AT TIME ZONE 'America/Bahia')::date >= $3) AND ($4::date IS NULL OR (l.created_at AT TIME ZONE 'America/Bahia')::date <= $4) AND ($5='' OR l.entity_type=$5) AND ($6='' OR l.action=$6)`;
+    try {
+      const result=await pool.query(`SELECT l.id,l.actor_subject,actor.name AS actor_name,l.action,l.entity_type,l.entity_id,l.summary,l.created_at ${where} ORDER BY l.created_at ${q.order==='asc'?'ASC':'DESC'},l.id ${q.order==='asc'?'ASC':'DESC'} LIMIT 50 OFFSET $7`,[...params,offset]);
+      const count=await pool.query(`SELECT COUNT(*)::int AS total ${where}`,params);
+      return res.json({activity:result.rows,total:count.rows[0].total,offline:false});
+    }catch(error){return fail(res,error,'consultar o histórico');}
+  });
   return router;
 }
