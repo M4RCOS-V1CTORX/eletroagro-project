@@ -11,3 +11,7 @@ apps/api/backups/
 # Arquivos locais de trabalho e entregas manuais (não usados pelo aplicativo).
 /tmp/
 /entrega/
+
+# Materiais gerados de entrega e cópia local da logo pública.
+/output/pdf/
+/logo.jpeg

@@ -42,7 +42,10 @@ mover arquivos, confira os módulos relacionados e reutilize o padrão atual.
 
 Os arquivos em `tmp/` e `entrega/` são locais e ignorados pelo Git. Não coloque
 código, testes ou documentação permanente nessas pastas. Os documentos existentes
-na raiz e os materiais já versionados em `output/` continuam nos caminhos atuais.
+na raiz e o relatório técnico em `output/` continuam nos caminhos atuais.
+PDFs gerados em `output/pdf/` ficam apenas no computador. A logo usada pelo
+aplicativo é `apps/web/public/logo-eletroagro.jpeg`; a cópia `logo.jpeg` da raiz
+também fica apenas no computador.
 
 ### Documentação por assunto
 
