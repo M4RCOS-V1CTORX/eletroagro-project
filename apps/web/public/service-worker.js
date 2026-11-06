@@ -1,5 +1,5 @@
 const CACHE_NAME = 'eletroagro-shell-v5';
-const SHELL = ['/', '/app', '/manifest.webmanifest', '/favicon.svg', '/logo-eletroagro.jpeg'];
+const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/logo-eletroagro.jpeg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async()=>{
@@ -39,11 +39,5 @@ self.addEventListener('fetch', (event) => {
     if(response.status>=500)throw new Error('Servidor indisponível');
     if (response.ok) {const copy=response.clone();event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request,copy)));}
     return response;
-  }).catch(async () => {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    if (request.mode !== 'navigate') return Response.error();
-    const fallback = url.pathname === '/app' || url.pathname === '/app/' ? '/app' : '/';
-    return caches.match(fallback);
-  }));
+  }).catch(async () => (await caches.match(request)) || (request.mode === 'navigate' ? caches.match('/') : Response.error())));
 });

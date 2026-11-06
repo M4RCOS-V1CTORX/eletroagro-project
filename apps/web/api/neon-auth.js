@@ -23,26 +23,13 @@ export default async function handler(request, response) {
   const incomingUrl = new URL(request.url, 'https://local.invalid');
   const authPathMarker = '/neon-auth/';
   const markerIndex = incomingUrl.pathname.indexOf(authPathMarker);
-  const queryPath = request.query?.__neonAuthPath ?? request.query?.path;
+  const queryPath = request.query.__neonAuthPath ?? request.query.path;
   const pathParts = markerIndex !== -1
     ? incomingUrl.pathname.slice(markerIndex + authPathMarker.length).split('/').filter(Boolean)
     : (Array.isArray(queryPath) ? queryPath : queryPath ? [queryPath] : [])
       .flatMap((part) => String(part).split('/'))
       .filter(Boolean);
-  let decodedParts;
-  try {
-    decodedParts = pathParts.map(part => decodeURIComponent(part));
-  } catch {
-    return response.status(400).json({ error: 'Endereço de autenticação inválido.' });
-  }
-  const isRegistration = decodedParts.some(part => part.toLowerCase().split('/').includes('sign-up'));
-  if (isRegistration) {
-    return response.status(403).json({
-      code: 'REGISTRATION_DISABLED',
-      message: 'O cadastro público está fechado. Solicite a liberação do seu acesso ao administrador.',
-    });
-  }
-  const targetUrl = new URL(`${neonAuthBaseUrl}/${decodedParts.map(part => encodeURIComponent(part)).join('/')}`);
+  const targetUrl = new URL(`${neonAuthBaseUrl}/${pathParts.map((part) => encodeURIComponent(decodeURIComponent(part))).join('/')}`);
   const upstreamQuery = new URLSearchParams(incomingUrl.searchParams);
   upstreamQuery.delete('__neonAuthPath');
   upstreamQuery.delete('path');

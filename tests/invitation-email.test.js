@@ -10,7 +10,6 @@ test('identifica configuração ausente sem expor credenciais', () => {
 test('monta link de convite e protege o HTML do nome da empresa', () => {
   const url = invitationEmailTestHelpers.invitationUrl({ APP_URL: 'https://eletroagro.example/' }, 'abc+/=');
   assert.equal(new URL(url).searchParams.get('invite'), 'abc+/=');
-  assert.equal(new URL(url).pathname, '/app');
   assert.equal(invitationEmailTestHelpers.escapeHtml('<Empresa & Filhos>'), '&lt;Empresa &amp; Filhos&gt;');
 });
 

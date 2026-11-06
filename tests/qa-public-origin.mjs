@@ -48,7 +48,7 @@ try {
   vite = await createServer({
     root: fileURLToPath(new URL('../apps/web/', import.meta.url)),
     configFile: fileURLToPath(new URL('../apps/web/vite.config.js', import.meta.url)),
-    server: { middlewareMode: true, hmr: false },
+    server: { middlewareMode: true },
     optimizeDeps: { include: ['qrcode-generator'] },
     define: { 'import.meta.env.VITE_API_URL': JSON.stringify(base), 'import.meta.env.VITE_PUBLIC_SITE_URL': JSON.stringify(base) },
     plugins: [{
@@ -90,7 +90,7 @@ try {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(`${base}/app`);
+  await page.goto(base);
   await page.getByRole('button', { name: 'Salvar etiqueta', exact: true }).waitFor().catch(async error => {
     console.error({ errors, body: await page.locator('body').innerText() });
     throw error;

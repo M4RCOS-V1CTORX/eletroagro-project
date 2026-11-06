@@ -1,48 +1,6 @@
 # Endereço publicado e autenticação
 
-Endereço do sistema para a equipe: https://eletroagro-project.vercel.app/app
-
-## Acesso restrito e consulta pública
-
-- A raiz `/` mostra somente a orientação para ler uma etiqueta, sem login nem cadastro.
-- `/rastrear/:publicId` permanece público e preserva os links já distribuídos.
-- `/app` abre o acesso da equipe. Conhecer esse endereço não concede acesso aos dados.
-- O cadastro livre está desabilitado no Neon Auth (`disable_sign_up=true`) e é
-  bloqueado também pelo proxy `/neon-auth`. Login e recuperação de senha permanecem ativos.
-- Esse bloqueio foi verificado para e-mail e senha. Há um provedor Google
-  configurado; a verificação de admissão por esse caminho permanece pendente.
-  Não considerar a revisão completa de autenticação concluída até fechar essa pendência.
-- Novas contas precisam ser provisionadas pelo administrador no Neon. Depois,
-  a pessoa define a senha pelo fluxo de recuperação e aceita o convite da empresa
-  com o mesmo e-mail. Não desabilite todo o Neon Auth para fechar o cadastro.
-- O convite da empresa autoriza o vínculo e suas permissões; ele não cria uma
-  conta de autenticação. Convites expirados, revogados ou destinados a outro e-mail
-  continuam sendo recusados pela API.
-- A criação de novos espaços exige o e-mail em `COMPANY_CREATION_ALLOWED_EMAILS`,
-  variável privada da API, separada por vírgulas. Sem configuração, a API recusa
-  essa operação. Nunca use prefixo `VITE_` para essa liberação.
-- Links antigos de convite e recuperação na raiz são encaminhados a `/app`
-  mantendo os parâmetros. Novos convites e recuperações já usam `/app`.
-- O manifesto instalável passa a iniciar em `/app`; atalhos antigos para `/`
-  precisam ser atualizados. Não limpe IndexedDB nem dados locais para trocar o atalho.
-
-Provisionamento administrativo pelo CLI já autenticado, sem divulgar credenciais:
-
-```powershell
-neon neon-auth user create --project-id flat-heart-79480674 --branch production --email pessoa@example.com --name "Pessoa autorizada"
-```
-
-Cada criação exige autorização explícita. Confirme o projeto e o e-mail antes
-de executar; a linha acima é um exemplo, não cria uma conta automaticamente.
-O responsável da empresa envia o convite pela tela de equipe após essa liberação.
-Para conferir o bloqueio de inscrições:
-
-```powershell
-neon neon-auth config email-password get --project-id flat-heart-79480674 --branch production
-```
-
-Validação isolada: `node tests/qa-access-restrictions.mjs` e
-`node tests/qa-public-origin.mjs`. Os testes não utilizam contas reais.
+Endereço para o cliente: https://eletroagro-project.vercel.app/
 
 O endereço com hash de implantação, como `eletroagro-project-emjrh4q8p-n4-sh.vercel.app`, é uma prévia. A proteção da Vercel, a lista de origens da API e os domínios confiáveis do Neon são controles diferentes.
 
