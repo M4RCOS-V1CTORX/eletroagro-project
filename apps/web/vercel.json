@@ -3,6 +3,13 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/rastrear/:publicId([a-f0-9]{64})",
+      "destination": "https://origem-eletroagro.smilingfly2.chatgpt.site/rastrear/:publicId",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/neon-auth/:path*",

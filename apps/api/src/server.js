@@ -1,5 +1,6 @@
 import './env.js';
 import { requestDiagnostics } from './lib/observability.js';
+import { createCorsOptions } from './lib/cors-policy.js';
 import {createOfflineRouter} from './routes/offline.js';
 import {createRequestPool} from './lib/request-pool.js';
 import express from 'express';
@@ -43,11 +44,7 @@ const pool=createRequestPool(rawPool);
 app.disable('x-powered-by');
 app.use(requestDiagnostics());
 app.use(helmet());
-app.use(cors({
-  origin(origin, callback) {
-    callback(null, !origin || allowedOrigins.has(origin) || origin === 'http://localhost:5173');
-  },
-}));
+app.use(cors(createCorsOptions(allowedOrigins)));
 const requestBuckets = new Map();
 app.use('/api', (request, response, next) => {
   if (request.path.startsWith('/health')) return next();

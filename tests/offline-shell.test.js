@@ -30,3 +30,15 @@ test('navegação com HTTP 503 recupera shell guardado',async()=>{
   env.handlers.fetch({request:{method:'GET',url:'http://localhost/',mode:'navigate'},respondWith:value=>work=value,waitUntil:()=>{}});
   assert.equal(await(await work).text(),'cached');
 });
+
+test('consulta pública não usa o cache administrativo nem o fallback offline', () => {
+  const env = setup();
+  for (const path of ['/rastrear', `/rastrear/${'a'.repeat(64)}`]) {
+    let intercepted = false;
+    env.handlers.fetch({
+      request: { method: 'GET', url: `http://localhost${path}`, mode: 'navigate' },
+      respondWith() { intercepted = true; },
+    });
+    assert.equal(intercepted, false);
+  }
+});

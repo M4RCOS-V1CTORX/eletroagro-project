@@ -1,5 +1,39 @@
 # Endereço publicado e autenticação
 
+## Consulta pública dos QR Codes — 06/11/2026
+
+Site de consulta: https://origem-eletroagro.smilingfly2.chatgpt.site/
+
+O site é independente do frontend administrativo e consulta somente
+`GET /api/public/traceability/:publicId`, sem cookies ou token de login.
+A API autoriza essa origem no CORS somente para o caminho público de
+rastreabilidade, mantendo as origens administrativas existentes.
+
+Novas etiquetas usam o domínio público acima, mantendo `/rastrear/IDENTIFICADOR`.
+As etiquetas antigas em `https://eletroagro-project.vercel.app/rastrear/IDENTIFICADOR`
+usam um redirecionamento temporário para o mesmo identificador no site público.
+O destino é fixo e o caminho aceita somente 64 caracteres hexadecimais minúsculos.
+Links locais e registros excluídos não são recuperados por esse redirecionamento.
+
+O service worker administrativo deixa as consultas `/rastrear` fora do cache.
+A atualização de um service worker já instalado depende de o navegador receber
+a nova versão; manter a consulta React anterior permite compatibilidade durante
+essa transição.
+
+Publicar a integração exige o deploy da API e do frontend na Vercel. Conferir
+o cabeçalho `Access-Control-Allow-Origin` da rota pública e o redirecionamento
+no domínio antigo após a publicação. Uma resposta 404 para um identificador
+inválido valida o transporte sem consultar dados reais; a leitura de uma etiqueta
+real continua necessária para homologação final pelo responsável.
+
+Rollback: reverter somente o commit de integração e republicar API/frontend.
+Isso restaura a consulta React no domínio antigo e o domínio anterior para novas
+etiquetas. Manter o site público disponível para etiquetas já geradas com ele.
+Não excluir ou regenerar os identificadores no banco. Não há migração de dados.
+
+Esta entrega não corrige os achados de autorização da auditoria de segurança;
+eles precisam de uma correção própria antes de considerar o sistema endurecido.
+
 Endereço para o cliente: https://eletroagro-project.vercel.app/
 
 O endereço com hash de implantação, como `eletroagro-project-emjrh4q8p-n4-sh.vercel.app`, é uma prévia. A proteção da Vercel, a lista de origens da API e os domínios confiáveis do Neon são controles diferentes.

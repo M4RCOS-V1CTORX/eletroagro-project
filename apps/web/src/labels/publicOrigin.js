@@ -1,5 +1,6 @@
+import { PUBLIC_SITE_ORIGIN } from '../../../../shared/public-site.js';
+
 const PUBLIC_ID = /^[a-f0-9]{64}$/;
-const PRODUCTION_ORIGIN = 'https://eletroagro-project.vercel.app';
 
 export function isLocalOrigin(value) {
   const { hostname } = new URL(value);
@@ -14,7 +15,7 @@ export function publicOriginUrl(publicId, {
   if (!PUBLIC_ID.test(publicId)) throw new Error('O registro não possui um identificador público válido.');
   let base;
   try {
-    base = new URL(configuredOrigin || PRODUCTION_ORIGIN);
+    base = new URL(configuredOrigin || PUBLIC_SITE_ORIGIN);
   } catch {
     throw new Error('Configure um endereço válido para a consulta pública.');
   }
