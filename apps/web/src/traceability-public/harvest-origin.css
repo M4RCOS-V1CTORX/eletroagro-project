@@ -1,0 +1,370 @@
+.harvest-origin-preview {
+  --origin-paper: #fafaf6;
+  --origin-ink: #24342c;
+  --origin-muted: #758078;
+  --origin-line: #e1e5dd;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100svh;
+  padding: 0 32px;
+  overflow: clip;
+  color: var(--origin-ink);
+  background:
+    radial-gradient(ellipse at 12% 0%, #284636 0%, transparent 54%),
+    radial-gradient(ellipse at 100% 95%, #254235 0%, transparent 52%),
+    #14261e;
+}
+
+.harvest-origin-preview *,
+.harvest-origin-preview *::before,
+.harvest-origin-preview *::after {
+  box-sizing: border-box;
+}
+
+/* Keep typography isolated from the administrative application's global rules. */
+body .harvest-origin-preview,
+body .harvest-origin-preview * {
+  font-family: 'Segoe UI', Arial, sans-serif !important;
+}
+
+.harvest-origin-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(#d7e5c815 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(130deg, #000, transparent 52%, #0008);
+}
+
+.harvest-origin-preview::before,
+.harvest-origin-preview::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 750px;
+  height: 750px;
+  border: 1px solid #abc5a21a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 70px #abc5a207, 0 0 0 140px #abc5a205;
+  pointer-events: none;
+}
+
+.harvest-origin-preview::before {
+  top: -460px;
+  right: -360px;
+}
+
+.harvest-origin-preview::after {
+  bottom: -570px;
+  left: -380px;
+}
+
+.harvest-origin-header,
+.harvest-origin-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(100%, 1000px);
+}
+
+.harvest-origin-header {
+  min-height: 92px;
+  border-bottom: 1px solid #cfdfc81c;
+  color: #e3e9db;
+}
+
+.harvest-origin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -.3px;
+}
+
+.harvest-origin-brand svg {
+  color: #b4c5a0;
+}
+
+.harvest-origin-context {
+  color: #b0bfab;
+  font-size: 9px;
+  letter-spacing: 1.7px;
+}
+
+.harvest-origin-panel {
+  width: min(100%, 760px);
+  margin: auto 0;
+  padding: 37px 40px 24px;
+  border: 1px solid #f5f6ed;
+  border-radius: 18px;
+  background: var(--origin-paper);
+  box-shadow: 0 28px 80px #07150c35, 0 3px 10px #07150c20;
+  animation: origin-document-enter .5s ease-out both;
+}
+
+.harvest-origin-panel-heading {
+  padding-bottom: 28px;
+}
+
+.harvest-origin-document-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.harvest-origin-document-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #54704d;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+}
+
+.harvest-origin-document-label::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #7f9564;
+}
+
+.harvest-origin-preview-label {
+  color: #7f887d;
+  font-size: 9px;
+}
+
+body .harvest-origin-preview .harvest-origin-panel-heading h1 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif !important;
+  font-size: 35px;
+  font-weight: 400;
+  letter-spacing: -1px;
+  line-height: 1.2;
+}
+
+.harvest-origin-panel-heading p {
+  margin: 12px 0 0;
+  color: var(--origin-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.harvest-origin-details {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--origin-line);
+}
+
+.harvest-origin-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+  min-height: 84px;
+  padding: 23px 0;
+  border-bottom: 1px solid var(--origin-line);
+}
+
+.harvest-origin-field dt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: #69766b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.harvest-origin-field-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #dce3d5;
+  border-radius: 10px;
+  color: #647f54;
+  background: #f1f4eb;
+}
+
+.harvest-origin-field-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.harvest-origin-field dd {
+  margin: 0;
+  color: var(--origin-ink);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -.4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.harvest-origin-note {
+  margin: 0;
+  padding-top: 19px;
+  color: #828a7f;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.harvest-origin-state {
+  padding: 28px 0;
+  border-top: 1px solid var(--origin-line);
+  border-bottom: 1px solid var(--origin-line);
+  color: var(--origin-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.harvest-origin-state p {
+  margin: 0;
+}
+
+.harvest-origin-state button {
+  margin-top: 18px;
+  padding: 10px 15px;
+  border: 1px solid #cbd9c2;
+  border-radius: 8px;
+  background: #eef3e8;
+  color: #305238;
+  font: inherit;
+  cursor: pointer;
+}
+
+.harvest-origin-state button:focus-visible {
+  outline: 2px solid #54704d;
+  outline-offset: 3px;
+}
+
+.harvest-origin-footer {
+  min-height: 78px;
+  padding: 20px 0;
+  color: #a9b7a4;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.harvest-origin-footer > span:first-child {
+  color: #d0d9c8;
+}
+
+@keyframes origin-document-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .harvest-origin-preview {
+    padding: 0 18px;
+  }
+
+  .harvest-origin-header {
+    min-height: 69px;
+    gap: 12px;
+  }
+
+  .harvest-origin-brand {
+    gap: 7px;
+    font-size: 16px;
+  }
+
+  .harvest-origin-context {
+    max-width: 95px;
+    font-size: 8px;
+    line-height: 1.7;
+    letter-spacing: 1px;
+    text-align: right;
+  }
+
+  .harvest-origin-panel {
+    padding: 25px 22px 22px;
+    border-radius: 16px;
+  }
+
+  .harvest-origin-document-meta {
+    margin-bottom: 22px;
+  }
+
+  .harvest-origin-document-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .harvest-origin-preview-label {
+    font-size: 8px;
+  }
+
+  body .harvest-origin-preview .harvest-origin-panel-heading h1 {
+    font-size: 29px;
+    letter-spacing: -.7px;
+  }
+
+  .harvest-origin-panel-heading {
+    padding-bottom: 22px;
+  }
+
+  .harvest-origin-panel-heading p {
+    font-size: 11px;
+  }
+
+  .harvest-origin-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+    min-height: 87px;
+    padding: 15px 0;
+  }
+
+  .harvest-origin-field dt {
+    gap: 11px;
+    font-size: 10px;
+  }
+
+  .harvest-origin-field-icon {
+    flex-basis: 29px;
+    width: 29px;
+    height: 29px;
+    border-radius: 8px;
+  }
+
+  .harvest-origin-field-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .harvest-origin-field dd {
+    padding-left: 40px;
+    font-size: 18px;
+  }
+
+  .harvest-origin-note {
+    padding-top: 17px;
+    font-size: 9px;
+  }
+
+  .harvest-origin-footer {
+    min-height: 66px;
+    gap: 10px;
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harvest-origin-panel {
+    animation: none;
+  }
+}

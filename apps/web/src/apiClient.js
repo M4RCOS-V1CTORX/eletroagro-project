@@ -73,6 +73,7 @@ export function apiRequest(path,options={}){
   const result=executeRequest(path,options).finally(()=>inFlightWrites.delete(key));inFlightWrites.set(key,result);return result;
 }
 async function executeRequest(path, options = {}) {
+  const allowOfflineRead = options.offlineFallback !== false;
   const context=currentContext;
   const checkContext=()=>{if(currentContext!==context){const error=new Error('A sessão mudou. Reabra a tela na conta atual. Lançamentos locais permanecem na conta original.');error.code='SESSION_CONTEXT_CHANGED';throw error;}};
   const checked=async promise=>{const result=await promise;checkContext();return result;};
@@ -81,14 +82,14 @@ async function executeRequest(path, options = {}) {
   if(context){const resolved=await checked(resolveKnownReferences(context,path,options));path=resolved.path;options=resolved.options;}
   const method = (options.method || 'GET').toUpperCase();
   const pending=context?await checked(pendingFor(context)):[];
-  if(method==='GET'&&pending.length){try{return await readLocal();}catch(error){checkContext();if(!navigator.onLine)throw error;}}
+  if(method==='GET'&&allowOfflineRead&&pending.length){try{return await readLocal();}catch(error){checkContext();if(!navigator.onLine)throw error;}}
   if(method==='DELETE'&&pending.length)throw new Error('Existem lançamentos locais pendentes. Sincronize ou revise a fila antes de excluir cadastros.');
   const queueable=canQueue(path,method);
   const headers=Object.fromEntries(new Headers(options.headers||{}).entries());
   if(context?.companyId)headers['x-company-context']=context.companyId;
   if(queueable&&!headers['x-idempotency-key'])headers['x-idempotency-key']=crypto.randomUUID();
   options={...options,method,headers};
-  if(!navigator.onLine){if(method==='GET')return readLocal();if(queueable)return saveLocal();throw new Error('Esta ação exige conexão. Seus dados foram preservados.');}
+  if(!navigator.onLine){if(method==='GET'&&allowOfflineRead)return readLocal();if(queueable)return saveLocal();throw new Error('Esta ação exige conexão. Seus dados foram preservados.');}
   if(queueable&&context&&(await checked(pendingFor(context))).length)return saveLocal();
   let response;
   try {
@@ -108,12 +109,12 @@ async function executeRequest(path, options = {}) {
     // while the transport was pending. Never return that result to the new session.
     if(queueable)return saveLocal();
     checkContext();
-    if(method==='GET'&&context&&await checked(snapshotRecord(context)))return readLocal();
+    if(method==='GET'&&allowOfflineRead&&context&&await checked(snapshotRecord(context)))return readLocal();
     throw new Error(error.name==='AbortError'?'O servidor demorou para responder. Tente novamente; seus dados foram preservados.':navigator.onLine ? 'Não foi possível conectar ao servidor.' : 'Você está sem internet. Reconecte para carregar esta tela.');
   }
   if(response.status>=500){
     if(queueable)return saveLocal();
-    if(method==='GET'&&context&&await checked(snapshotRecord(context)))return readLocal();
+    if(method==='GET'&&allowOfflineRead&&context&&await checked(snapshotRecord(context)))return readLocal();
   }
   let body={};if(response.status!==204){try{body=await response.json();}catch{if(queueable&&response.ok)return saveLocal();checkContext();throw new Error('A resposta do servidor chegou incompleta. Tente novamente; os dados digitados foram preservados.');}}
   checkContext();

@@ -61,6 +61,65 @@ também fica apenas no computador.
 - npm.
 - Banco PostgreSQL de desenvolvimento é opcional para abrir a interface e verificar a API; necessário para operações que consultem dados.
 
+## QR Code: formulário e histórico de etiquetas
+
+A tela apresenta um único formulário: produto, propriedade, responsáveis pela
+colheita (um nome por linha) e data da colheita. Os nomes são digitados diretamente,
+sem cadastros prévios nem vínculos obrigatórios. Os dados exigem conexão e ficam
+isolados por empresa. Não há cadastro de lote.
+
+O histórico na mesma página reúne as novas etiquetas e as colheitas registradas
+na versão anterior, preservando os quatro dados originais. Após salvar, o histórico
+permite visualizar a consulta pública, gerar o QR Code e baixar a imagem PNG.
+O código contém o endereço da consulta; as informações não são enviadas a serviços
+externos de geração. A impressão permite de 1 a 100 etiquetas de 50 × 50 mm,
+em duas colunas separadas por 2 mm, com prévia e orientação para a Zetex Z50X.
+O alinhamento e a leitura na bobina precisam de conferência na impressora física.
+A prévia visual local continua demonstrativa e separada da consulta real.
+
+- Página: `apps/web/src/QRCodePage.jsx`.
+- Interface organizada em `apps/web/src/labels/`: formulário, histórico e coordenação.
+- API: `/api/traceability/labels` (cadastro e histórico paginado).
+- Edição: `PATCH /api/traceability/labels/:publicId` corrige os quatro campos de etiquetas do formulário simplificado, mantendo o identificador e o QR Code. Verifica permissão de editar, empresa e dados originais para recusar sobrescritas desatualizadas (409); alteração e auditoria são transacionais. Etiquetas legadas permanecem disponíveis para consulta e exclusão, com edição indisponível.
+- Consulta sem login: `/rastrear/:publicId`, com API em `/api/public/traceability/:publicId`. Retorna exclusivamente produto, propriedade, nomes dos responsáveis e data da colheita. Não lista registros e não consulta empresas arquivadas.
+- Banco: `018_traceability_labels.sql` cria uma tabela independente, sem modificar as tabelas anteriores.
+- Compatibilidade: as rotas e tabelas das migrações 016 e 017 permanecem preservadas.
+- Permissões: utiliza o módulo de rastreamento já existente, com visualizar e cadastrar.
+- Testes: `npm test` valida nomes livres, histórico unificado, isolamento, permissões, reenvio, paginação e recuperação pelo backup.
+
+### Endereço das etiquetas e teste público
+
+O endereço padrão de produção das etiquetas é
+`https://eletroagro-project.vercel.app/rastrear/IDENTIFICADOR`.
+Ele permanece fixo mesmo quando a aplicação é aberta por um endereço de prévia.
+Configure `VITE_PUBLIC_SITE_URL` no frontend para substituir esse domínio. Use apenas a origem, por exemplo
+`https://origem.example`, sem caminhos. Em produção, a geração exige HTTPS e recusa
+endereços localhost. Sem essa variável, o desenvolvimento usa a origem atual do navegador
+e a produção usa o domínio fixo acima.
+Não imprima etiquetas definitivas antes de confirmar um domínio permanente.
+
+Durante o desenvolvimento, o link normalmente usa localhost e só abre no próprio
+computador. Para testar em um celular, tanto a página quanto a API precisam estar
+acessíveis por um endereço de rede apropriado. A consulta pública exige internet.
+O frontend inclui uma regra de reescrita da Vercel para abrir `/rastrear/:publicId`
+diretamente. Publicação e configuração do domínio exigem autorização separada.
+
+`node tests/qa-public-origin.mjs` testa formulário, API, banco descartável, geração,
+download e consulta pública. Usa Playwright no runtime local ou em
+`PLAYWRIGHT_MODULE_PATH`. Para também decodificar o PNG com um leitor independente,
+defina `QR_DECODER_PATH` com o módulo de teste `jsqr` e, quando necessário,
+`SHARP_MODULE_PATH` com `sharp`. Esses leitores não são dependências do aplicativo.
+
+Antes de habilitar em produção, gere e verifique um backup com o banco no estado
+atual. A rotina de backup tolera a ausência das novas tabelas antes da migração.
+Aplique a migração somente com autorização, valide os cadastros e gere um novo
+backup que inclua essas tabelas. Para recuar após o início de uso, desative o acesso
+ao módulo e preserve as tabelas e seus dados. Não remova as tabelas nem restaure um
+backup antigo sobre dados novos sem um plano específico de recuperação.
+
+Na ausência da migração, a API informa que os cadastros ainda não foram habilitados.
+Não publique o frontend antes de preparar o banco e a API correspondente.
+
 ## Executar localmente
 
 Instale as dependências a partir das pastas dos aplicativos:

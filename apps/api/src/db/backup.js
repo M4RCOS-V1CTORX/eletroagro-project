@@ -1,5 +1,5 @@
 import '../env.js';
-import {backupTables,protectBackup} from '../lib/backup.js';
+import {backupTables,optionalBackupTables,protectBackup} from '../lib/backup.js';
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -17,7 +17,7 @@ try {
   const data = {};
   for (const table of tables) {
     const exists=await client.query('SELECT to_regclass($1) AS name',[`public.${table}`]);
-    if(!exists.rows[0].name && ['sale_year_counters','transport_profiles','company_access_profiles'].includes(table))continue;
+    if(!exists.rows[0].name && optionalBackupTables.includes(table))continue;
     data[table] = (await client.query(`SELECT * FROM public.${table}`)).rows;
   }
   await client.query('COMMIT');

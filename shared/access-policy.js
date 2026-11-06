@@ -1,5 +1,6 @@
 // Shared policy schema. The API remains authoritative; UI checks are convenience only.
 export const moduleCatalog={
+  traceability:{label:'QR Code — produtores e propriedades',area:'operations',actions:['view','create','edit','delete']},
   dashboard:{label:'Visão geral',area:null,actions:['view']},
   company:{label:'Empresa e documentos',area:null,actions:['view','edit']},
   users:{label:'Usuários e permissões',area:null,actions:['view','create','edit','administer','reset']},

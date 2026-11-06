@@ -38,3 +38,15 @@ test('HTTP 503 permite leitura local e preserva escrita com chave gerada',async(
   const env=setup({status:503});assert.equal((await env.request('/api/customers')).offline,true);
   assert.equal((await env.request('/api/customers',{method:'POST',body:'{}'})).queued,true);assert.equal(env.saves(),1);
 });
+
+test('consulta exclusivamente online preserva erro HTTP sem tentar leitura offline',async()=>{
+  const env=setup({status:503});
+  await assert.rejects(env.request('/api/traceability/producers',{offlineFallback:false}),e=>e.status===503&&e.message==='Recusado');
+  assert.equal(env.reads(),0);
+});
+
+test('consulta exclusivamente online com falha de rede não procura snapshot',async()=>{
+  const env=setup({networkError:new TypeError('Failed to fetch')});
+  await assert.rejects(env.request('/api/traceability/producers',{offlineFallback:false}),/conectar ao servidor/);
+  assert.equal(env.reads(),0);
+});

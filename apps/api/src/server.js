@@ -12,6 +12,8 @@ import { createCustomersRouter } from './routes/customers.js';
 import { createCatalogRouter } from './routes/catalog.js';
 import { createQuotesRouter } from './routes/quotes.js';
 import { createLoadForecastsRouter } from './routes/load-forecasts.js';
+import { createTraceabilityRouter } from './routes/traceability.js';
+import { createPublicTraceabilityRouter } from './routes/public-traceability.js';
 import { createSuppliersRouter } from './routes/suppliers.js';
 import { createSalesRouter } from './routes/sales.js';
 import { createOperationsRouter } from './routes/operations.js';
@@ -88,6 +90,8 @@ app.get('/api/health/database', async (_request, response) => {
   }
 });
 
+app.use('/api/public/traceability', createPublicTraceabilityRouter({ pool, requireDatabase }));
+
 app.get('/api/session', requireNeonAuth, (request, response) => {
   response.json({ user: request.auth });
 });
@@ -104,6 +108,7 @@ app.use('/api/catalog', createCatalogRouter({
   requireAuth: requireNeonAuth,
   requireDatabase,
 }));
+app.use('/api/traceability', createTraceabilityRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 app.use('/api/load-forecasts', createLoadForecastsRouter({ pool, requireAuth: requireNeonAuth, requireDatabase }));
 app.use('/api/quotes', createQuotesRouter({
   pool,

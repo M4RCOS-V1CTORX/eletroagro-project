@@ -1,0 +1,8 @@
+.traceability-document {
+  --document-ink: #1d1d1f;
+  --document-muted: #6e6e73;
+  --document-line: #e5e5e8;
+  --document-surface: #f5f5f7;
+  --document-accent: #326847;
+  --document-accent-light: #edf4ef;
+}
