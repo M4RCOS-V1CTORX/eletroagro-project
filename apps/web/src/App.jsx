@@ -1,7 +1,8 @@
 import {canAction} from '../../../shared/access-policy.js';
 import ModuleBoundary from './ModuleBoundary.jsx';
+import AuthScreen from './AuthScreen.jsx';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Banknote, Package, QrCode, ReceiptText, Settings, ShieldCheck, Wifi, WifiOff, X } from 'lucide-react';
+import { Activity, Bell, Bolt, Boxes, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, CircleDollarSign, ClipboardList, ContactRound, Download, FileBarChart, LayoutDashboard, LogOut, Menu, Banknote, Package, QrCode, ReceiptText, Settings, Wifi, WifiOff, X } from 'lucide-react';
 import { authClient, getAuthAccessToken } from './authClient.js';
 import { apiUrl } from './apiUrl.js';
 import OfflineTools from './OfflineTools.jsx';
@@ -20,7 +21,7 @@ const ExpensesPage = lazy(() => import('./OperationsPages.jsx').then((module) =>
 const AgendaPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AgendaPage })));
 const StockPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.StockPage })));
 const AuditPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.AuditPage })));
-const CompanyAccessPage = lazy(() => import('./OperationsPages.jsx').then((module) => ({ default: module.CompanyAccessPage })));
+const CompanyAccessPage = lazy(() => import('./CompanyAccessPage.jsx'));
 const ReportsPage = lazy(() => import('./ReportsPage.jsx'));
 const ReceiptsPage = lazy(() => import('./ReceiptsPage.jsx'));
 const QRCodePage = lazy(() => import('./QRCodePage.jsx'));
@@ -80,7 +81,12 @@ async function verifyApiSession(sessionResult) {
   });
   const companyBody = await companyResponse.json().catch(() => ({}));
   if (!companyResponse.ok && companyResponse.status !== 503) throw new Error(companyBody.error?.message || 'Não foi possível consultar o espaço da empresa.');
-  return { ...body.user, company: companyBody.company || null, databaseUnavailable: companyResponse.status === 503 };
+  return {
+    ...body.user,
+    company: companyBody.company || null,
+    canCreateCompany: companyBody.canCreateCompany === true,
+    databaseUnavailable: companyResponse.status === 503,
+  };
 }
 
 export default function App() {
@@ -89,7 +95,6 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [authNotice, setAuthNotice] = useState('');
-  const [isSignUp, setIsSignUp] = useState(true);
   const [authView, setAuthView] = useState(new URLSearchParams(window.location.search).get('token') ? 'reset' : 'access');
   const [authBusy, setAuthBusy] = useState(false);
   const [apiStatus, setApiStatus] = useState('checking');
@@ -230,32 +235,26 @@ export default function App() {
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') || '').trim().toLowerCase();
     const password = String(form.get('password') || '');
-    const name = String(form.get('name') || '').trim();
     try {
-      const result = isSignUp
-        ? await authClient.signUp.email({ name, email, password })
-        : await authClient.signIn.email({ email, password });
+      const result = await authClient.signIn.email({ email, password });
       if (result.error) {
         const authMessage = result.error.message || '';
         const authCode = result.error.code || '';
         const combinedAuthError = `${authCode} ${authMessage}`;
         if (authCode === 'INVALID_ORIGIN' || /invalid origin/i.test(authMessage)) {
-          throw new Error('Este endereço de acesso não está autorizado. Abra o sistema em https://eletroagro-project.vercel.app/ e entre novamente.');
+          throw new Error('Este endereço de acesso não está autorizado. Abra o sistema em https://eletroagro-project.vercel.app/app e entre novamente.');
         }
-        if (!isSignUp && /email.*(not verified|unverified|not confirmed)|verify.*email|confirm.*email|EMAIL_NOT_VERIFIED/i.test(combinedAuthError)) {
+        if (/email.*(not verified|unverified|not confirmed)|verify.*email|confirm.*email|EMAIL_NOT_VERIFIED/i.test(combinedAuthError)) {
           setAuthNotice('Seu e-mail ainda não foi confirmado. Abra a mensagem de confirmação que enviamos, confira também o spam e depois volte para entrar.');
           return;
         }
-        if (isSignUp && /already.*(exist|register)|user.*exists|EMAIL_ALREADY_EXISTS/i.test(combinedAuthError)) {
-          throw new Error('Este e-mail já tem uma conta. Toque em Entrar e use a senha que você cadastrou.');
-        }
-        if (!isSignUp && /invalid.*(email|password|credential)|incorrect.*(email|password)|INVALID_EMAIL_OR_PASSWORD/i.test(combinedAuthError)) {
+        if (/invalid.*(email|password|credential)|incorrect.*(email|password)|INVALID_EMAIL_OR_PASSWORD/i.test(combinedAuthError)) {
           throw new Error('E-mail ou senha não conferem. Confira os dados e tente novamente.');
         }
         if (/failed to fetch|network error|load failed|fetch failed/i.test(authMessage)) {
           throw new Error('Não foi possível conectar ao serviço de acesso. Verifique sua internet e tente novamente.');
         }
-        throw new Error(authMessage || (isSignUp ? 'Não foi possível criar sua conta.' : 'Não foi possível entrar. Tente novamente.'));
+        throw new Error(authMessage || 'Não foi possível entrar. Tente novamente.');
       }
 
       const sessionResult = await readAuthSessionWithRetry();
@@ -263,11 +262,6 @@ export default function App() {
         throw new Error(`O serviço de autenticação não conseguiu ler a sessão (HTTP ${sessionResult.error.status || 'erro'}): ${sessionResult.error.message || 'resposta inválida do servidor'}`);
       }
       if (!sessionResult.data?.session) {
-        if (isSignUp) {
-          setAuthNotice(`Conta criada${email ? ` para ${email}` : ''}. Abra o e-mail de confirmação, inclusive a pasta de spam, e confirme seu endereço. Depois, volte aqui e toque em Entrar.`);
-          setIsSignUp(false);
-          return;
-        }
         throw new Error('A autenticação respondeu, mas o navegador não confirmou a sessão. Confira se os cookies estão permitidos para este site e tente novamente.');
       }
       let verifiedUser;
@@ -294,7 +288,7 @@ export default function App() {
     event.preventDefault(); setAuthBusy(true); setAuthError(''); setAuthNotice('');
     const email = String(new FormData(event.currentTarget).get('email') || '').trim().toLowerCase();
     try {
-      const result = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/?reset=1` });
+      const result = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/app?reset=1` });
       if (result?.error) throw new Error(result.error.message || 'Não foi possível enviar a recuperação.');
       setAuthNotice('Enviamos as instruções de recuperação. Confira sua caixa de entrada e a pasta de spam.');
     } catch (error) { setAuthError(error.message || 'Não foi possível enviar a recuperação.'); }
@@ -309,7 +303,9 @@ export default function App() {
       if (!token) throw new Error('Este link de recuperação não possui um token válido. Solicite um novo link.');
       const result = await authClient.resetPassword({ newPassword: password, token });
       if (result?.error) throw new Error(result.error.message || 'Não foi possível alterar a senha.');
-      window.history.replaceState({}, '', window.location.pathname); setAuthView('access'); setIsSignUp(false); setAuthNotice('Senha alterada. Entre com sua nova senha.');
+      window.history.replaceState({}, '', window.location.pathname);
+      setAuthView('access');
+      setAuthNotice('Senha alterada. Entre com sua nova senha.');
     } catch (error) { setAuthError(error.message || 'Não foi possível alterar a senha.'); }
     finally { setAuthBusy(false); }
   }
@@ -329,7 +325,7 @@ export default function App() {
   }
 
   if (authLoading) return <div className="auth-loading">Conferindo sua sessão…</div>;
-  if (!user) return <AuthScreen view={authView} isSignUp={isSignUp} onToggleMode={(nextMode) => { setAuthView('access'); setIsSignUp(nextMode); setAuthError(''); setAuthNotice(''); }} onForgot={() => { setAuthView('forgot'); setAuthError(''); setAuthNotice(''); }} onBack={() => { setAuthView('access'); setIsSignUp(false); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} onRecovery={handlePasswordRecovery} onReset={handlePasswordReset} busy={authBusy} error={authError} notice={authNotice} />;
+  if (!user) return <AuthScreen view={authView} onForgot={() => { setAuthView('forgot'); setAuthError(''); setAuthNotice(''); }} onBack={() => { setAuthView('access'); setAuthError(''); setAuthNotice(''); }} onSubmit={handleAuthSubmit} onRecovery={handlePasswordRecovery} onReset={handlePasswordReset} busy={authBusy} error={authError} notice={authNotice} />;
   if (!user.company) return <Suspense fallback={<div className="auth-loading">Preparando seu espaço…</div>}><CompanyAccessPage user={user} onComplete={(company) => { syncApiContext({issuer:user.issuer,subject:user.subject,companyId:company.id}); setUser((current) => ({ ...current, company })); setCompanyName(company.name); setPage('overview'); }} onSignOut={handleSignOut} /></Suspense>;
 
   const syncLabel = !online ? 'Sem conexão' : `${pendingSync} pendente(s)`;
@@ -401,37 +397,6 @@ export default function App() {
       </nav>
     </div>
   );
-}
-
-function AuthScreen({ view, isSignUp, onToggleMode, onForgot, onBack, onSubmit, onRecovery, onReset, busy, error, notice }) {
-  if (!authClient) {
-    return <main className="auth-shell"><section className="auth-card"><Brand /><h1>Configuração necessária</h1><p className="auth-description">Configure VITE_NEON_AUTH_URL em apps/web/.env e reinicie o Vite para ativar o acesso.</p></section></main>;
-  }
-  return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <Brand />
-        <p className="auth-eyebrow"><span className="auth-eyebrow-dot" /> ACESSO SEGURO</p>
-        <h1>{view === 'forgot' ? 'Recuperar acesso' : view === 'reset' ? 'Criar nova senha' : isSignUp ? 'Crie sua conta' : 'Bem-vindo de volta'}</h1>
-        <p className="auth-description">{view === 'forgot' ? 'Informe seu e-mail para receber o link seguro de recuperação.' : view === 'reset' ? 'Escolha uma senha nova para voltar ao sistema.' : isSignUp ? 'Organize sua operação em um só lugar. Cadastre seu acesso para começar.' : 'Entre para continuar no sistema de gestão da EletroAgro.'}</p>
-        <form className="auth-form" onSubmit={view === 'forgot' ? onRecovery : view === 'reset' ? onReset : onSubmit}>
-          {view === 'access' && isSignUp && <label>Nome<input name="name" type="text" autoComplete="name" minLength="2" maxLength="120" required placeholder="Seu nome" /></label>}
-          {view !== 'reset' && <label>E-mail<input name="email" type="email" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck="false" autoComplete="email" required placeholder="voce@empresa.com" /></label>}
-          {view !== 'forgot' && <label>{view === 'reset' ? 'Nova senha' : 'Senha'}<input name="password" type="password" autoCapitalize="none" autoComplete={view === 'reset' || isSignUp ? 'new-password' : 'current-password'} minLength="8" required placeholder={view === 'reset' || isSignUp ? 'Pelo menos 8 caracteres' : 'Digite sua senha'} /></label>}
-          {view === 'reset' && <label>Repita a nova senha<input name="confirmation" type="password" autoComplete="new-password" minLength="8" required placeholder="Digite novamente" /></label>}
-          {error && <p className="auth-message error" role="alert">{error}</p>}
-          {notice && <p className="auth-message notice" role="status">{notice}</p>}
-          <button className="auth-submit" type="submit" disabled={busy}>{busy ? <><span className="auth-spinner" /> Aguarde…</> : view === 'forgot' ? 'Enviar recuperação' : view === 'reset' ? 'Salvar nova senha' : isSignUp ? 'Criar minha conta' : 'Entrar na minha conta'}</button>
-        </form>
-        {view === 'access' ? <><p className="auth-toggle">{isSignUp ? 'Já tem uma conta?' : 'Ainda não tem uma conta?'} <button type="button" onClick={() => onToggleMode(!isSignUp)}>{isSignUp ? 'Entrar' : 'Criar conta'}</button></p>{!isSignUp && <p className="auth-toggle auth-forgot"><button type="button" onClick={onForgot}>Esqueci minha senha</button></p>}</> : <p className="auth-toggle"><button type="button" onClick={onBack}>Voltar para entrar</button></p>}
-        <div className="auth-security"><ShieldCheck size={16} /><span><b>Acesso protegido</b><small>Seus dados ficam seguros com autenticação criptografada.</small></span></div>
-      </section>
-    </main>
-  );
-}
-
-function Brand() {
-  return <div className="auth-brand-wrap"><a className="auth-brand" href="#inicio" aria-label="EletroAgro Soluções"><img src="/logo-eletroagro.jpeg" alt="EletroAgro Soluções" /></a><span><b>EletroAgro</b><small>GESTÃO E OPERAÇÃO</small></span></div>;
 }
 
 function Metric({ icon: Icon, tone, label, value, note }) {

@@ -21,6 +21,7 @@ function invitationUrl(environment, code) {
   if (!base) return '';
   try {
     const url = new URL(base);
+    url.pathname = '/app';
     url.searchParams.set('invite', code);
     return url.toString();
   } catch {
@@ -48,7 +49,7 @@ export async function sendInvitationEmail({ email, companyName, code, environmen
     to: [email],
     subject: `Convite para acessar ${companyName}`,
     text: `Você foi convidado para ${companyName}. Entre com este mesmo e-mail e use o código: ${code}.${appUrl ? ` Abra: ${appUrl}` : ''} O convite expira em 7 dias.`,
-    html: `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;color:#173f58"><div style="height:5px;border-radius:8px;background:linear-gradient(90deg,#176da3,#27856e)"></div><h2 style="margin:28px 0 8px">Você foi convidado para ${safeCompanyName}</h2><p style="color:#667d8c;line-height:1.6">Crie ou acesse sua conta com este mesmo e-mail para entrar na equipe.</p><p style="padding:16px;background:#f2f7f5;border:1px solid #dce9e3;border-radius:10px;font-size:17px;word-break:break-all"><strong>${safeCode}</strong></p>${safeAppUrl ? `<p><a href="${safeAppUrl}" style="display:inline-block;padding:12px 18px;border-radius:9px;background:#176da3;color:#fff;text-decoration:none;font-weight:700">Abrir EletroAgro e aceitar convite</a></p>` : ''}<p style="margin-top:24px;color:#82929c;font-size:13px">O convite expira em 7 dias.</p></div>`,
+    html: `<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:auto;color:#173f58"><div style="height:5px;border-radius:8px;background:linear-gradient(90deg,#176da3,#27856e)"></div><h2 style="margin:28px 0 8px">Você foi convidado para ${safeCompanyName}</h2><p style="color:#667d8c;line-height:1.6">Acesse sua conta autorizada com este mesmo e-mail para entrar na equipe. Se ainda não possui acesso, solicite a liberação ao administrador.</p><p style="padding:16px;background:#f2f7f5;border:1px solid #dce9e3;border-radius:10px;font-size:17px;word-break:break-all"><strong>${safeCode}</strong></p>${safeAppUrl ? `<p><a href="${safeAppUrl}" style="display:inline-block;padding:12px 18px;border-radius:9px;background:#176da3;color:#fff;text-decoration:none;font-weight:700">Abrir EletroAgro e aceitar convite</a></p>` : ''}<p style="margin-top:24px;color:#82929c;font-size:13px">O convite expira em 7 dias.</p></div>`,
   };
   if (environment.EMAIL_REPLY_TO?.trim()) payload.reply_to = environment.EMAIL_REPLY_TO.trim();
 

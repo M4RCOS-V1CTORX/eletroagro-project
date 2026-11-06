@@ -142,12 +142,13 @@ npm run dev:api
 npm run dev:web
 ```
 
-Frontend: `http://localhost:5173`  
+Sistema da equipe: `http://localhost:5173/app`
+Consulta pública: `http://localhost:5173/`
 API: `http://localhost:3000/api/health`
 
 Os arquivos locais `apps/api/.env` e `apps/web/.env` guardam as configurações de desenvolvimento. Não compartilhe nem versione arquivos `.env`. Para Neon PostgreSQL, `DATABASE_SSL=true` exige TLS com validação de certificado. Em produção, configure `WEB_ORIGIN` na API com a origem exata do frontend; origens múltiplas podem ser separadas por vírgula.
 
-O login e cadastro usam Neon Auth; a API valida assinatura EdDSA, emissor, audiência e validade do JWT usando o JWKS. O primeiro usuário pode criar a empresa e convidar até quatro pessoas. O acesso aos dados exige vínculo ativo com a empresa.
+O login usa Neon Auth; a API valida assinatura EdDSA, emissor, audiência e validade do JWT usando o JWKS. O cadastro público está fechado. Novas contas são provisionadas pelo administrador; a criação de empresa exige liberação privada na API, e o responsável pode convidar até quatro pessoas autorizadas. O acesso aos dados exige vínculo ativo com a empresa. Consulte `PUBLICACAO.md` para provisionamento e links de acesso.
 
 Depois de configurar uma URL PostgreSQL de desenvolvimento, aplique as migrações a partir da raiz com `npm --prefix apps/api run db:migrate`. Em produção, faça backup e confirme o estado do banco antes de aplicar qualquer migração.
 

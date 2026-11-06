@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { requireCompanyMembership, requireDatabase } from '../middleware/neon-auth.js';
 import { sendInvitationEmail } from '../services/invitation-email.js';
+import { canCreateCompany } from '../lib/company-admission.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const permissionKeys = ['commercial', 'operations', 'finance', 'reports', 'audit'];
@@ -11,7 +12,7 @@ const defaultPermissions = Object.fromEntries(permissionKeys.map((key) => [key, 
 function normalizePermissions(input) { if(input?.version===2)return normalizePolicy(input);return Object.fromEntries(permissionKeys.map((key) => [key, input?.[key] !== false])); }
 export const companyTestHelpers = { normalizePermissions, permissionKeys };
 
-export function createCompaniesRouter({ pool, requireAuth }) {
+export function createCompaniesRouter({ pool, requireAuth, environment = process.env }) {
   const router = Router();
   router.use(requireAuth, requireDatabase(pool));
 
@@ -35,7 +36,10 @@ export function createCompaniesRouter({ pool, requireAuth }) {
          LIMIT 1`,
         [request.auth.issuer, request.auth.subject],
       );
-      return response.json({ company: result.rows[0] || null });
+      return response.json({
+        company: result.rows[0] || null,
+        canCreateCompany: canCreateCompany(request.auth, environment),
+      });
     } catch (error) {
       console.error('Falha ao carregar empresa do usuário:', error.message);
       return response.status(500).json({ error: { code: 'COMPANY_LOOKUP_FAILED', message: 'Não foi possível carregar a empresa.' } });
@@ -240,6 +244,14 @@ export function createCompaniesRouter({ pool, requireAuth }) {
   });
 
   router.post('/', async (request, response) => {
+    if (!canCreateCompany(request.auth, environment)) {
+      return response.status(403).json({
+        error: {
+          code: 'COMPANY_CREATION_RESTRICTED',
+          message: 'A criação de empresas exige liberação administrativa. Use um convite para entrar em uma equipe.',
+        },
+      });
+    }
     const name = typeof request.body?.name === 'string' ? request.body.name.trim() : '';
     if (name.length < 2 || name.length > 160) {
       return response.status(400).json({ error: { code: 'INVALID_COMPANY_NAME', message: 'Informe o nome da empresa (de 2 a 160 caracteres).' } });
