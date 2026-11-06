@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowUpRight, Download, Printer, QrCode } from 'lucide-react';
 import { isLocalOrigin, publicOriginUrl } from './publicOrigin.js';
+import LabelPrintPreview from './LabelPrintPreview.jsx';
 
 export default function LabelCodeActions({ label }) {
   const [image, setImage] = useState(null);
@@ -8,6 +9,7 @@ export default function LabelCodeActions({ label }) {
   const [error, setError] = useState('');
   const [printing, setPrinting] = useState(false);
   const [quantity, setQuantity] = useState(2);
+  const [printRequest, setPrintRequest] = useState(null);
   let publicUrl;
   let configurationError;
   try { publicUrl = publicOriginUrl(label.public_id); }
@@ -37,20 +39,15 @@ export default function LabelCodeActions({ label }) {
     } finally { setBusy(false); }
   }
 
-  async function previewPrint(event) {
+  function previewPrint(event) {
     event.preventDefault();
-    const preview = window.open('', '_blank');
-    if (!preview) { setError('Permita abrir a janela de impressão neste navegador.'); return; }
-    preview.opener = null;
-    setBusy(true);
     setError('');
-    try {
-      const { prepareLabelPrint } = await import('./printLabel.js');
-      await prepareLabelPrint(preview, { label, publicUrl, quantity: Number(quantity) });
-    } catch (error) {
-      preview.close();
-      setError(error.message);
-    } finally { setBusy(false); }
+    setPrintRequest(previous => ({
+      label,
+      publicUrl,
+      quantity: Number(quantity),
+      revision: (previous?.revision || 0) + 1,
+    }));
   }
 
   return (
@@ -77,7 +74,7 @@ export default function LabelCodeActions({ label }) {
                 <input type="number" min="1" max="100" step="1" required value={quantity} disabled={busy}
                   onChange={event => setQuantity(event.target.value)} />
               </label>
-              <p className="label-code-note">Etiquetas de 50 × 50 mm, em duas colunas, com 2 mm de espaço entre elas. Confira se esse formato corresponde à sua bobina.</p>
+              <p className="label-code-note">Etiquetas de 50 × 50 mm, em duas colunas, com 2 mm de espaço entre elas. O PDF já inclui o tamanho da página e as margens internas.</p>
               <button type="submit" className="workspace-button primary" disabled={busy}>Abrir prévia de impressão</button>
             </form>
           )}
@@ -86,6 +83,9 @@ export default function LabelCodeActions({ label }) {
               <img src={image} alt={`QR Code de origem de ${label.product_name}`} width="224" height="224" />
               <figcaption>Leia o código para consultar as informações da colheita.</figcaption>
             </figure>
+          )}
+          {printRequest && (
+            <LabelPrintPreview key={printRequest.revision} request={printRequest} onClose={() => setPrintRequest(null)} />
           )}
           {isLocalOrigin(publicUrl) && <p className="label-code-note">Este QR Code abre apenas neste computador. Use o endereço público do sistema antes de distribuir ou imprimir etiquetas.</p>}
         </>

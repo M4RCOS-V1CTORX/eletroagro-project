@@ -153,26 +153,32 @@ try {
   assert.equal(png.subarray(1, 4).toString(), 'PNG');
   await record.getByRole('button', { name: 'Imprimir', exact: true }).click();
   await record.getByLabel('Quantidade de etiquetas').fill('3');
-  const [printPreview] = await Promise.all([
-    page.waitForEvent('popup'),
-    record.getByRole('button', { name: 'Abrir prévia de impressão', exact: true }).click(),
-  ]);
+  await page.evaluate(() => { window.open = () => null; });
+  await record.getByRole('button', { name: 'Abrir prévia de impressão', exact: true }).click();
+  const previewElement = await record.getByTitle('Prévia de impressão das etiquetas').elementHandle();
+  const printPreview = await previewElement.contentFrame();
   await printPreview.getByRole('button', { name: 'Imprimir etiquetas', exact: true }).waitFor();
   await printPreview.getByRole('heading', { name: 'Impressão de etiquetas', exact: true }).waitFor();
   await printPreview.waitForFunction(() => !document.querySelector('button').disabled);
-  assert.equal(await printPreview.locator('.print-label-row').count(), 2);
-  assert.equal(await printPreview.locator('.print-label img').count(), 3);
-  assert.equal(await printPreview.getByLabel('Posição sem impressão').count(), 1);
-  await printPreview.emulateMedia({ media: 'print' });
-  const printSize = await printPreview.locator('.print-label-row').first().boundingBox();
-  assert(Math.abs(printSize.width - 102 * 96 / 25.4) < 1);
-  assert(Math.abs(printSize.height - 50 * 96 / 25.4) < 1);
-  assert.equal(await printPreview.locator('.print-instructions').isVisible(), false);
-  await printPreview.emulateMedia({ media: 'screen' });
-  await printPreview.evaluate(() => { window.print = () => { window.printRequested = true; }; });
+  await printPreview.getByTitle('PDF das etiquetas').waitFor();
+  const [pdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    printPreview.getByRole('link', { name: 'Baixar PDF', exact: true }).click(),
+  ]);
+  assert.match(pdfDownload.suggestedFilename(), /^etiquetas-[a-f0-9]{12}\.pdf$/);
+  const pdfBytes = await readFile(await pdfDownload.path());
+  assert.equal(pdfBytes.subarray(0, 5).toString(), '%PDF-');
+  if (process.env.QA_PRINT_PDF_PATH) {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(process.env.QA_PRINT_PDF_PATH, pdfBytes);
+  }
+  await printPreview.evaluate(() => {
+    const frame = document.querySelector('iframe');
+    frame.contentWindow.print = () => { window.printRequested = true; };
+  });
   await printPreview.getByRole('button', { name: 'Imprimir etiquetas', exact: true }).click();
   assert.equal(await printPreview.evaluate(() => window.printRequested), true);
-  await printPreview.close();
+  await record.getByRole('button', { name: 'Fechar prévia', exact: true }).click();
   if (process.env.QR_DECODER_PATH) {
     const decode = require(process.env.QR_DECODER_PATH);
     const sharp = require(process.env.SHARP_MODULE_PATH

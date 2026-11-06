@@ -1,14 +1,16 @@
 import { createLabelQrPng } from './generateLabelQr.js';
+import { createLabelPrintPdf, LABEL_PRINT_LAYOUT } from './labelPrintPdf.js';
 import printStyles from './print-label.css?raw';
 
 export async function prepareLabelPrint(preview, { label, publicUrl, quantity }) {
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
-    throw new Error('Informe de 1 a 100 etiquetas por impressão.');
-  }
+  const qrDataUrl = createLabelQrPng(publicUrl);
+  const pdf = await createLabelPrintPdf({ label, qrDataUrl, quantity });
+  const pdfUrl = preview.URL.createObjectURL(pdf.output('blob'));
   const doc = preview.document;
   doc.documentElement.lang = 'pt-BR';
-  doc.title = 'Impressão de etiquetas — EletroAgro';
+  doc.title = 'Impressão de etiquetas - EletroAgro';
   doc.body.replaceChildren();
+  doc.head.querySelectorAll('style').forEach(style => style.remove());
   const style = doc.createElement('style');
   style.textContent = printStyles;
   doc.head.append(style);
@@ -21,37 +23,41 @@ export async function prepareLabelPrint(preview, { label, publicUrl, quantity })
   }
 
   const instructions = element('header', '', 'print-instructions');
-  instructions.append(element('h1', 'Impressão de etiquetas'),
-    element('p', `${quantity} etiqueta(s) de 50 × 50 mm, em duas colunas separadas por 2 mm.`),
-    element('p', 'Selecione a Zetex Z50X. Use escala 100% (tamanho real), sem margens e sem cabeçalhos/rodapés. Configure no driver a mídia para duas colunas: faixa de 102 mm mais as margens laterais reais do suporte, altura de 50 mm e intervalo entre fileiras conforme a bobina.'),
-    element('p', 'Imprima primeiro duas etiquetas para conferir o alinhamento e a leitura do QR Code. Se o navegador mostrar A4, ajuste o tamanho personalizado nas preferências da impressora antes de imprimir.'));
+  const frame = element('iframe', '', 'label-print-document');
+  frame.title = 'PDF das etiquetas';
   const printButton = element('button', 'Imprimir etiquetas');
   printButton.type = 'button';
   printButton.disabled = true;
-  printButton.addEventListener('click', () => { preview.focus(); preview.print(); });
-  instructions.append(printButton);
-  doc.body.append(instructions);
-
-  const qr = createLabelQrPng(publicUrl);
-  const date = new Intl.DateTimeFormat('pt-BR').format(new Date(`${String(label.harvest_date).slice(0, 10)}T12:00:00`));
-  const images = [];
-  for (let index = 0; index < quantity; index += 2) {
-    const row = element('section', '', 'print-label-row');
-    for (let column = 0; column < 2; column++) {
-      const cell = element('article', '', 'print-label');
-      if (index + column < quantity) {
-        const image = element('img');
-        image.src = qr;
-        image.alt = `QR Code de ${label.product_name}`;
-        images.push(image);
-        cell.append(element('strong', label.product_name), image, element('span', `Colheita: ${date}`));
-      } else {
-        cell.setAttribute('aria-label', 'Posição sem impressão');
-      }
-      row.append(cell);
+  const printError = element('p');
+  printError.setAttribute('role', 'alert');
+  printButton.addEventListener('click', () => {
+    printError.textContent = '';
+    try {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      printError.textContent = 'Não foi possível abrir a impressão. Use Baixar PDF para abrir e imprimir o documento.';
     }
-    doc.body.append(row);
-  }
-  await Promise.all(images.map(image => image.decode()));
-  printButton.disabled = false;
+  });
+
+  const downloadLink = element('a', 'Baixar PDF');
+  downloadLink.href = pdfUrl;
+  downloadLink.download = `etiquetas-${label.public_id.slice(0, 12)}.pdf`;
+  instructions.append(
+    element('h1', 'Impressão de etiquetas'),
+    element('p', `${quantity} etiqueta(s) de 50 × 50 mm. Cada página contém até duas etiquetas.`),
+    element('p', `PDF preparado em ${LABEL_PRINT_LAYOUT.pageWidth} × ${LABEL_PRINT_LAYOUT.pageHeight} mm, sem cabeçalhos nem rodapés. Selecione sua impressora de etiquetas para imprimir.`),
+    printButton,
+    downloadLink,
+    printError,
+  );
+  frame.addEventListener('load', () => { printButton.disabled = false; });
+  frame.src = `${pdfUrl}#toolbar=0&navpanes=0&view=FitH`;
+  const releaseDocument = () => preview.URL.revokeObjectURL(pdfUrl);
+  preview.addEventListener('pagehide', releaseDocument, { once: true });
+  doc.body.append(instructions, frame);
+  return () => {
+    preview.removeEventListener('pagehide', releaseDocument);
+    releaseDocument();
+  };
 }

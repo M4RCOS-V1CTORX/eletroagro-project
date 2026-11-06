@@ -75,9 +75,17 @@ na versão anterior, preservando os quatro dados originais. Após salvar, o hist
 permite visualizar a consulta pública, gerar o QR Code e baixar a imagem PNG.
 O código contém o endereço da consulta; as informações não são enviadas a serviços
 externos de geração. A impressão permite de 1 a 100 etiquetas de 50 × 50 mm,
-em duas colunas separadas por 2 mm, com prévia e orientação para a Zetex Z50X.
-O alinhamento e a leitura na bobina precisam de conferência na impressora física.
+em duas colunas separadas por 2 mm. Cada fileira é uma página PDF de 102 × 50 mm,
+sem cabeçalhos ou rodapés do navegador. O nome, o QR Code de 30 mm e a data têm
+posições fixas com folga nas bordas; nomes extensos são abreviados em duas linhas,
+mantendo o nome completo na consulta pública. O PDF solicita impressão sem escala
+e seleção de bandeja pelo tamanho da página. A prévia permite imprimir ou baixar o PDF.
+O driver pode ignorar essas preferências: calibração do sensor, avanço e tamanho
+de mídia da impressora exigem conferência física, sem ajuste automático pelo navegador.
 A prévia visual local continua demonstrativa e separada da consulta real.
+
+A prévia de impressão abre dentro da própria tela, sem depender de pop-ups.
+Use `Imprimir etiquetas` na prévia ou `Baixar PDF` para imprimir pelo leitor de PDF.
 
 - Página: `apps/web/src/QRCodePage.jsx`.
 - Interface organizada em `apps/web/src/labels/`: formulário, histórico e coordenação.

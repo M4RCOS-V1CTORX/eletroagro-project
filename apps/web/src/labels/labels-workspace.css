@@ -233,6 +233,21 @@
 .label-print-settings .label-code-note { margin: 0; }
 .label-print-settings button { justify-self: start; }
 
+.label-print-preview {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.label-print-preview > iframe {
+  display: block;
+  width: 100%;
+  height: 85vh;
+  margin-top: 12px;
+  border: 1px solid var(--document-line);
+  border-radius: 8px;
+  background: white;
+}
+
 .label-code-image {
   margin: 20px 0 0;
   text-align: center;
