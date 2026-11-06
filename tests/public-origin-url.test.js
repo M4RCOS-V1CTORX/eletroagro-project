@@ -6,8 +6,22 @@ const id = 'a'.repeat(64);
 
 test('endereço público usa domínio configurado e preserva o identificador', () => {
   assert.equal(publicOriginUrl(id, { configuredOrigin: 'https://origem.example', currentOrigin: 'http://localhost:5173', production: true }), `https://origem.example/rastrear/${id}`);
-  assert.equal(publicOriginUrl(id, { currentOrigin: 'http://localhost:5173', production: false }), `http://localhost:5173/rastrear/${id}`);
+  assert.equal(publicOriginUrl(id, { currentOrigin: 'http://localhost:5173', production: false }), `https://eletroagro-project.vercel.app/rastrear/${id}`);
   assert.equal(publicOriginUrl(id, { configuredOrigin: '', currentOrigin: 'https://preview.example', production: true }), `https://eletroagro-project.vercel.app/rastrear/${id}`);
+});
+
+test('endereço público não depende do navegador e testes locais exigem configuração explícita', () => {
+  const publicUrl = `https://eletroagro-project.vercel.app/rastrear/${id}`;
+
+  assert.equal(publicOriginUrl(id), publicUrl);
+  for (const currentOrigin of ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://192.168.1.10:5173', 'https://preview.example']) {
+    assert.equal(publicOriginUrl(id, { currentOrigin, production: false }), publicUrl);
+  }
+
+  assert.equal(publicOriginUrl(id, {
+    configuredOrigin: 'http://127.0.0.1:5298',
+    production: false,
+  }), `http://127.0.0.1:5298/rastrear/${id}`);
 });
 
 test('códigos inválidos, credenciais, caminhos e origens impróprias são recusados', () => {

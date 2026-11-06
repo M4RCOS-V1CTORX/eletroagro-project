@@ -97,13 +97,14 @@ O endereço padrão de produção das etiquetas é
 Ele permanece fixo mesmo quando a aplicação é aberta por um endereço de prévia.
 Configure `VITE_PUBLIC_SITE_URL` no frontend para substituir esse domínio. Use apenas a origem, por exemplo
 `https://origem.example`, sem caminhos. Em produção, a geração exige HTTPS e recusa
-endereços localhost. Sem essa variável, o desenvolvimento usa a origem atual do navegador
-e a produção usa o domínio fixo acima.
+endereços localhost. Sem essa variável, tanto o desenvolvimento quanto a produção
+usam o domínio fixo acima, independentemente do endereço aberto no navegador.
 Não imprima etiquetas definitivas antes de confirmar um domínio permanente.
 
-Durante o desenvolvimento, o link normalmente usa localhost e só abre no próprio
-computador. Para testar em um celular, tanto a página quanto a API precisam estar
-acessíveis por um endereço de rede apropriado. A consulta pública exige internet.
+Testes isolados podem definir explicitamente `VITE_PUBLIC_SITE_URL` com um endereço
+local. Não distribua etiquetas geradas com essa configuração: localhost só abre no
+próprio computador. Registros criados em banco descartável não existem em produção.
+A consulta pública exige internet e um registro salvo no banco da API publicada.
 O frontend inclui uma regra de reescrita da Vercel para abrir `/rastrear/:publicId`
 diretamente. Publicação e configuração do domínio exigem autorização separada.
 

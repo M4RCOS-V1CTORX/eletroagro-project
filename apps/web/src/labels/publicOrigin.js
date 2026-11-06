@@ -9,13 +9,15 @@ export function isLocalOrigin(value) {
 
 export function publicOriginUrl(publicId, {
   configuredOrigin = import.meta.env?.VITE_PUBLIC_SITE_URL,
-  currentOrigin = typeof window === 'undefined' ? '' : window.location.origin,
   production = import.meta.env?.PROD === true,
 } = {}) {
   if (!PUBLIC_ID.test(publicId)) throw new Error('O registro não possui um identificador público válido.');
   let base;
-  try { base = new URL(configuredOrigin || (production ? PRODUCTION_ORIGIN : currentOrigin)); }
-  catch { throw new Error('Configure um endereço válido para a consulta pública.'); }
+  try {
+    base = new URL(configuredOrigin || PRODUCTION_ORIGIN);
+  } catch {
+    throw new Error('Configure um endereço válido para a consulta pública.');
+  }
 
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password
     || base.search || base.hash || base.pathname !== '/') {
