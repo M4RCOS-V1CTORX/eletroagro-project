@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
+import { labelContacts, validLabelContacts } from '../lib/label-contacts.js';
 
 function validName(value) {
   return typeof value === 'string' && value.trim().length >= 2 && value.trim().length <= 200;
@@ -14,14 +15,15 @@ function validDate(value) {
 function validLabel(body) {
   return body && validName(body.productName) && validName(body.propertyName) && validDate(body.harvestDate)
     && Array.isArray(body.producerNames) && body.producerNames.length > 0 && body.producerNames.length <= 100
-    && body.producerNames.every(validName);
+    && body.producerNames.every(validName)
+    && validLabelContacts(body);
 }
 
 function fail(error, response) {
-  if (error.code === '42P01') {
+  if (error.code === '42P01' || error.code === '42703') {
     return response.status(503).json({ error: {
       code: 'TRACEABILITY_NOT_READY',
-      message: 'O formulário simplificado de etiquetas ainda não foi habilitado neste ambiente.',
+      message: 'O cadastro de etiquetas está temporariamente indisponível. Tente novamente mais tarde.',
     } });
   }
   console.error('Falha na etiqueta de origem:', error.code || 'UNKNOWN');
@@ -45,12 +47,12 @@ export function createLabelsRouter({ pool }) {
       // The old harvest records remain visible without migrating or rewriting their contents.
       const filteredRecords = `
         SELECT * FROM (
-          SELECT l.id,l.product_name,l.property_name,l.harvest_date,l.public_id,l.created_at,true AS editable,
+          SELECT l.id,l.product_name,l.property_name,l.harvest_date,l.public_id,l.created_at,l.phone,l.email,true AS editable,
             (SELECT jsonb_agg(jsonb_build_object('name',p.name) ORDER BY p.position)
               FROM jsonb_array_elements_text(l.producer_names) WITH ORDINALITY AS p(name,position)) AS producers
           FROM public.traceability_labels l WHERE l.company_id=$1
           UNION ALL
-          SELECT h.id,h.product_name,h.property_name,h.harvest_date,h.public_id,h.created_at,false AS editable,
+          SELECT h.id,h.product_name,h.property_name,h.harvest_date,h.public_id,h.created_at,'' AS phone,'' AS email,false AS editable,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('name',p.producer_name) ORDER BY p.producer_name,p.producer_id)
               FROM public.traceability_harvest_producers p
               WHERE p.company_id=h.company_id AND p.harvest_id=h.id),'[]'::jsonb) AS producers
@@ -70,18 +72,20 @@ export function createLabelsRouter({ pool }) {
   router.post('/labels', async (request, response) => {
     const body = request.body;
     if (!validLabel(body)) {
-      return response.status(400).json({ error: { message: 'Preencha produto, propriedade, um ou mais responsáveis e uma data da colheita válida. Nomes devem ter entre 2 e 200 caracteres.' } });
+      return response.status(400).json({ error: { message: 'Confira os dados da colheita. Use nomes entre 2 e 200 caracteres. Se informar contatos, use telefone com DDD e e-mail válido.' } });
     }
     const producerNames = [...new Set(body.producerNames.map(name => name.trim()))];
+    const contacts = labelContacts(body);
     let client;
     try {
       client = await pool.connect();
       await client.query('BEGIN');
       const result = await client.query(`INSERT INTO public.traceability_labels
-        (company_id,product_name,property_name,producer_names,harvest_date,public_id)
-        VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING *`, [
+        (company_id,product_name,property_name,producer_names,harvest_date,public_id,phone,email)
+        VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8) RETURNING *`, [
         request.company.company_id, body.productName.trim(), body.propertyName.trim(),
         JSON.stringify(producerNames), body.harvestDate, randomBytes(32).toString('hex'),
+        contacts.phone, contacts.email,
       ]);
       const label = result.rows[0];
       await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary)
@@ -98,28 +102,32 @@ export function createLabelsRouter({ pool }) {
   router.patch('/labels/:publicId', async (request, response) => {
     const body = request.body;
     if (!/^[a-f0-9]{64}$/.test(request.params.publicId) || !validLabel(body) || !validLabel(body.original)) {
-      return response.status(400).json({ error: { message: 'Confira os quatro campos e reabra a etiqueta antes de editar.' } });
+      return response.status(400).json({ error: { message: 'Confira os dados da colheita e os contatos. Reabra a etiqueta antes de editar.' } });
     }
     let client;
     try {
       client = await pool.connect();
       await client.query('BEGIN');
       const params = [request.company.company_id, request.params.publicId];
-      const current = (await client.query(`SELECT id,product_name,property_name,producer_names,harvest_date::text AS harvest_date
+      const current = (await client.query(`SELECT id,product_name,property_name,producer_names,harvest_date::text AS harvest_date,phone,email
         FROM public.traceability_labels WHERE company_id=$1 AND public_id=$2 FOR UPDATE`, params)).rows[0];
       if (!current) {
         await client.query('ROLLBACK');
         return response.status(404).json({ error: { message: 'Etiqueta não encontrada ou da versão anterior. Atualize o histórico.' } });
       }
       const original = body.original;
+      const originalContacts = labelContacts(original);
       if (current.product_name !== original.productName || current.property_name !== original.propertyName
+        || current.phone !== originalContacts.phone || current.email !== originalContacts.email
         || current.harvest_date !== original.harvestDate || JSON.stringify(current.producer_names) !== JSON.stringify(original.producerNames)) {
         await client.query('ROLLBACK');
         return response.status(409).json({ error: { message: 'Esta etiqueta foi alterada por outra pessoa. Cancele a edição, atualize o histórico e abra novamente.' } });
       }
-      await client.query(`UPDATE public.traceability_labels SET product_name=$3,property_name=$4,producer_names=$5::jsonb,harvest_date=$6
+      const contacts = labelContacts(body);
+      await client.query(`UPDATE public.traceability_labels SET product_name=$3,property_name=$4,producer_names=$5::jsonb,harvest_date=$6,phone=$7,email=$8
         WHERE company_id=$1 AND public_id=$2`, [...params, body.productName.trim(), body.propertyName.trim(),
-        JSON.stringify([...new Set(body.producerNames.map(name => name.trim()))]), body.harvestDate]);
+        JSON.stringify([...new Set(body.producerNames.map(name => name.trim()))]), body.harvestDate,
+        contacts.phone, contacts.email]);
       await client.query(`INSERT INTO public.audit_logs(company_id,actor_subject,action,entity_type,entity_id,summary)
         VALUES($1,$2,'updated','traceability_label',$3,$4::jsonb)`, [request.company.company_id, request.auth.subject,
         current.id, JSON.stringify({ name: body.productName.trim(), harvestDate: body.harvestDate })]);

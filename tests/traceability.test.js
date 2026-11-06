@@ -95,7 +95,7 @@ test('cadastros de rastreamento validam vínculos, isolamento, permissões, revi
     assert(savedHarvest.producers.some(producer => producer.name === 'Ana'));
     assert.equal(savedHarvest.public_id, harvest.public_id);
     assert.equal((await call('/harvests?offset=100')).pagination.total, 1);
-    const labelBody = { productName: 'Manga', propertyName: 'Sítio novo', producerNames: [' Alice ', 'Carlos'], harvestDate: '2026-11-05' };
+    const labelBody = { productName: 'Manga', propertyName: 'Sítio novo', producerNames: [' Alice ', 'Carlos'], harvestDate: '2026-11-05', phone: '(77) 99999-1234', email: 'contato@fazenda.com.br' };
     const labelKey = randomUUID();
     const label = (await call('/labels', labelBody, 201, 'owner', 'POST', labelKey)).label;
     assert.match(label.public_id, /^[a-f0-9]{64}$/);
@@ -112,11 +112,11 @@ test('cadastros de rastreamento validam vínculos, isolamento, permissões, revi
       return response.json();
     }
     const publicLabel = await publicCall(label.public_id);
-    assert.deepEqual(publicLabel, { harvest: { product: 'Manga', property: 'Sítio novo', producers: ['Alice', 'Carlos'], harvestDate: '2026-11-05' } });
+    assert.deepEqual(publicLabel, { harvest: { product: 'Manga', property: 'Sítio novo', producers: ['Alice', 'Carlos'], harvestDate: '2026-11-05', phone: labelBody.phone, email: labelBody.email } });
     assert.equal(history.labels.find(row => row.id === label.id).editable, true);
     assert.equal(history.labels.find(row => row.id === harvest.id).editable, false);
     const original = { ...labelBody, producerNames: ['Alice', 'Carlos'] };
-    const correction = { productName: 'Manga corrigida', propertyName: 'Sítio corrigido', producerNames: ['Daniela'], harvestDate: '2026-11-06' };
+    const correction = { productName: 'Manga corrigida', propertyName: 'Sítio corrigido', producerNames: ['Daniela'], harvestDate: '2026-11-06', phone: '+55 77 98888-4321', email: 'novo@fazenda.com.br' };
     const editBody = { ...correction, original };
     const editPath = `/labels/${label.public_id}`;
     await call(editPath, editBody, 403, 'viewer', 'PATCH');
@@ -131,13 +131,22 @@ test('cadastros de rastreamento validam vínculos, isolamento, permissões, revi
     await db.exec('ALTER TABLE audit_logs DROP CONSTRAINT qa_reject_label_edit');
     await call(editPath, editBody, 200, 'owner', 'PATCH');
     assert.deepEqual(await publicCall(label.public_id), { harvest: { product: correction.productName, property: correction.propertyName,
-      producers: correction.producerNames, harvestDate: correction.harvestDate } });
+      producers: correction.producerNames, harvestDate: correction.harvestDate, phone: correction.phone, email: correction.email } });
+    await call(editPath, { ...correction, original: { ...correction, phone: labelBody.phone } }, 409, 'owner', 'PATCH');
+    await call(editPath, { ...correction, original: { ...correction, email: labelBody.email } }, 409, 'owner', 'PATCH');
+    await call(editPath, { ...editBody, email: 'invalido' }, 400, 'owner', 'PATCH');
     await call(editPath, editBody, 409, 'owner', 'PATCH');
     await call(editPath, { ...original, original: correction }, 200, 'owner', 'PATCH');
     assert.deepEqual(await publicCall(label.public_id), publicLabel);
+    const withoutContacts = { ...original, phone: '', email: '' };
+    await call(editPath, { ...withoutContacts, original }, 200, 'owner', 'PATCH');
+    const clearedLabel = await publicCall(label.public_id);
+    assert.equal(clearedLabel.harvest.phone, '');
+    assert.equal(clearedLabel.harvest.email, '');
+    await call(editPath, { ...original, original: withoutContacts }, 200, 'owner', 'PATCH');
     assert.equal((await call('/labels')).pagination.total, 2);
     const publicHarvest = await publicCall(harvest.public_id);
-    assert.deepEqual(Object.keys(publicHarvest.harvest).sort(), ['harvestDate', 'producers', 'product', 'property']);
+    assert.deepEqual(Object.keys(publicHarvest.harvest).sort(), ['email', 'harvestDate', 'phone', 'producers', 'product', 'property']);
     assert.equal(publicHarvest.harvest.property, 'Fazenda');
     assert(publicHarvest.harvest.producers.includes('Ana'));
     await publicCall('invalid', 404);
@@ -153,7 +162,7 @@ test('cadastros de rastreamento validam vínculos, isolamento, permissões, revi
     assert.equal((await call('/labels', null, 200, 'other')).pagination.total, 0);
     await call('/labels', labelBody, 403, 'viewer');
     await call('/labels', null, 403, 'denied');
-    for (const invalid of [{ productName: '' }, { propertyName: 'A' }, { harvestDate: '2026-02-30' }, { producerNames: [] }, { producerNames: [null] }, { producerNames: ['A'] }, { producerNames: Array(101).fill('Nome') }]) {
+    for (const invalid of [{ phone: '123' }, { phone: 'abc9999999999' }, { phone: null }, { phone: '9'.repeat(31) }, { email: 'invalido' }, { email: 'a@b.com\nBcc:injetado' }, { email: 42 }, { email: 'a'.repeat(250) + '@b.com' }, { productName: '' }, { propertyName: 'A' }, { harvestDate: '2026-02-30' }, { producerNames: [] }, { producerNames: [null] }, { producerNames: ['A'] }, { producerNames: Array(101).fill('Nome') }]) {
       await call('/labels', { ...labelBody, ...invalid }, 400);
     }
     await call('/labels?offset=-1', null, 400);

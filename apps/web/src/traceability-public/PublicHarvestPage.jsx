@@ -10,6 +10,10 @@ function formatHarvest(data) {
     || typeof data.harvestDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.harvestDate)) {
     throw new Error('A consulta retornou dados incompletos. Tente novamente.');
   }
+  if ((data.phone != null && typeof data.phone !== 'string')
+    || (data.email != null && typeof data.email !== 'string')) {
+    throw new Error('A consulta retornou contatos inválidos. Tente novamente.');
+  }
   const date = new Date(`${data.harvestDate}T12:00:00`);
   if (Number.isNaN(date.getTime())) throw new Error('Não foi possível ler a data da colheita.');
   return { ...data, harvestDate: dateFormatter.format(date) };

@@ -64,7 +64,9 @@ também fica apenas no computador.
 ## QR Code: formulário e histórico de etiquetas
 
 A tela apresenta um único formulário: produto, propriedade, responsáveis pela
-colheita (um nome por linha) e data da colheita. Os nomes são digitados diretamente,
+colheita (um nome por linha), data da colheita, telefone e e-mail. Os contatos são
+opcionais e, quando informados, aparecem no histórico e na consulta pública.
+O formulário avisa que esses dados serão divulgados. Os nomes são digitados diretamente,
 sem cadastros prévios nem vínculos obrigatórios. Os dados exigem conexão e ficam
 isolados por empresa. Não há cadastro de lote.
 
@@ -80,9 +82,10 @@ A prévia visual local continua demonstrativa e separada da consulta real.
 - Página: `apps/web/src/QRCodePage.jsx`.
 - Interface organizada em `apps/web/src/labels/`: formulário, histórico e coordenação.
 - API: `/api/traceability/labels` (cadastro e histórico paginado).
-- Edição: `PATCH /api/traceability/labels/:publicId` corrige os quatro campos de etiquetas do formulário simplificado, mantendo o identificador e o QR Code. Verifica permissão de editar, empresa e dados originais para recusar sobrescritas desatualizadas (409); alteração e auditoria são transacionais. Etiquetas legadas permanecem disponíveis para consulta e exclusão, com edição indisponível.
-- Consulta sem login: `/rastrear/:publicId`, com API em `/api/public/traceability/:publicId`. Retorna exclusivamente produto, propriedade, nomes dos responsáveis e data da colheita. Não lista registros e não consulta empresas arquivadas.
+- Edição: `PATCH /api/traceability/labels/:publicId` corrige os dados da colheita e os contatos, mantendo o identificador e o QR Code. Verifica permissão de editar, empresa e dados originais, incluindo contatos, para recusar sobrescritas desatualizadas (409); alteração e auditoria são transacionais. Etiquetas legadas permanecem disponíveis para consulta e exclusão, com edição indisponível.
+- Consulta sem login: `/rastrear/:publicId`, com API em `/api/public/traceability/:publicId`. Retorna exclusivamente produto, propriedade, nomes dos responsáveis, data da colheita, telefone e e-mail. Não lista registros e não consulta empresas arquivadas. Contatos vazios não são exibidos na página.
 - Banco: `018_traceability_labels.sql` cria uma tabela independente, sem modificar as tabelas anteriores.
+- Contatos: `019_traceability_label_contacts.sql` adiciona telefone e e-mail à tabela de etiquetas, com valores vazios por padrão, preservando registros existentes. A API continua aceitando cadastros sem contatos; backup e restauração incluem as novas colunas.
 - Compatibilidade: as rotas e tabelas das migrações 016 e 017 permanecem preservadas.
 - Permissões: utiliza o módulo de rastreamento já existente, com visualizar e cadastrar.
 - Testes: `npm test` valida nomes livres, histórico unificado, isolamento, permissões, reenvio, paginação e recuperação pelo backup.

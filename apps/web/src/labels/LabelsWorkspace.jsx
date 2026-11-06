@@ -9,7 +9,15 @@ import LabelHistorySearch from './LabelHistorySearch.jsx';
 const PAGE_SIZE = 25;
 
 function emptyDraft() {
-  return { productName: '', propertyName: '', producerNames: '', harvestDate: localToday(), key: crypto.randomUUID() };
+  return {
+    productName: '',
+    propertyName: '',
+    producerNames: '',
+    harvestDate: localToday(),
+    phone: '',
+    email: '',
+    key: crypto.randomUUID(),
+  };
 }
 
 export default function LabelsWorkspace({ canCreate, canEdit, canDelete }) {
@@ -77,8 +85,14 @@ export default function LabelsWorkspace({ canCreate, canEdit, canDelete }) {
   }
 
   function beginEdit(label) {
-    const original = { productName: label.product_name, propertyName: label.property_name,
-      producerNames: label.producers.map(producer => producer.name), harvestDate: String(label.harvest_date).slice(0, 10) };
+    const original = {
+      productName: label.product_name,
+      propertyName: label.property_name,
+      producerNames: label.producers.map(producer => producer.name),
+      harvestDate: String(label.harvest_date).slice(0, 10),
+      phone: label.phone || '',
+      email: label.email || '',
+    };
     setEditing({ publicId: label.public_id, original });
     setDraft({ ...original, producerNames: original.producerNames.join('\n'), key: crypto.randomUUID() });
     setFormError('');
@@ -113,8 +127,15 @@ export default function LabelsWorkspace({ canCreate, canEdit, canDelete }) {
       await apiRequest(editing ? `/api/traceability/labels/${editing.publicId}` : '/api/traceability/labels', {
         method: editing ? 'PATCH' : 'POST',
         headers: { 'X-Idempotency-Key': draft.key },
-        body: JSON.stringify({ productName: draft.productName, propertyName: draft.propertyName, producerNames, harvestDate: draft.harvestDate,
-          ...(editing ? { original: editing.original } : {}) }),
+        body: JSON.stringify({
+          productName: draft.productName,
+          propertyName: draft.propertyName,
+          producerNames,
+          harvestDate: draft.harvestDate,
+          phone: draft.phone,
+          email: draft.email,
+          ...(editing ? { original: editing.original } : {}),
+        }),
       });
       setDraft(emptyDraft());
       setEditing(null);
@@ -151,7 +172,7 @@ export default function LabelsWorkspace({ canCreate, canEdit, canDelete }) {
           <header className="label-section-heading">
             <span className="label-eyebrow">{editing ? 'EDITAR ETIQUETA' : 'NOVA ETIQUETA'}</span>
             <h2 id="label-form-title">{editing ? 'Corrigir informações da colheita' : 'Informações da colheita'}</h2>
-            <p>{editing ? 'Atualize os dados da colheita. Quem ler o QR Code verá as informações corrigidas.' : 'Informe os dados que serão exibidos para quem ler o QR Code. Os nomes dos responsáveis também ficarão visíveis.'}</p>
+            <p>{editing ? 'Atualize os dados da colheita e os contatos. Quem ler o QR Code verá as informações corrigidas.' : 'Informe os dados que serão exibidos para quem ler o QR Code. Os nomes dos responsáveis, o telefone e o e-mail informados ficarão públicos.'}</p>
           </header>
           {unavailable && <p className="workspace-message" role="status">O cadastro de etiquetas está temporariamente indisponível. Tente novamente mais tarde. Seus registros estão preservados.</p>}
           {formError && <p className="workspace-message is-error" role="alert">{formError}</p>}

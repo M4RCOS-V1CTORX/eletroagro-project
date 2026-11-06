@@ -1,4 +1,4 @@
-import { CalendarDays, Leaf, MapPin, Users } from 'lucide-react';
+import { CalendarDays, Leaf, Mail, MapPin, Phone, Users } from 'lucide-react';
 
 export default function HarvestOriginDetails({ harvest }) {
   const fields = [
@@ -11,6 +11,14 @@ export default function HarvestOriginDetails({ harvest }) {
     },
     { label: 'Data da colheita', value: harvest.harvestDate, icon: CalendarDays },
   ];
+
+  if (harvest.phone) {
+    fields.push({ label: 'Telefone', value: harvest.phone, icon: Phone });
+  }
+
+  if (harvest.email) {
+    fields.push({ label: 'E-mail', value: harvest.email, icon: Mail });
+  }
 
   return (
     <dl className="harvest-origin-details">

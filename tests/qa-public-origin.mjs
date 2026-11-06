@@ -99,6 +99,8 @@ try {
   await page.getByLabel('Propriedade', { exact: true }).fill('Sítio QA');
   await page.getByLabel('Responsáveis pela colheita', { exact: true }).fill('Ana QA\nBruno QA');
   await page.getByLabel('Data da colheita', { exact: true }).fill('2026-11-05');
+  await page.getByLabel('Telefone', { exact: true }).fill('(77) 99999-1234');
+  await page.getByLabel('E-mail', { exact: true }).fill('contato@fazenda.com.br');
   await page.getByRole('button', { name: 'Salvar etiqueta', exact: true }).click();
   const record = page.getByRole('article', { name: 'Etiqueta de Manga QA', exact: true });
   await record.waitFor();
@@ -120,6 +122,10 @@ try {
   await page.getByRole('button', { name: 'Cancelar edição', exact: true }).click();
   await record.getByRole('button', { name: 'Editar etiqueta de Manga QA' }).click();
   assert.equal(await page.getByLabel('Produto', { exact: true }).inputValue(), 'Manga QA');
+  assert.equal(await page.getByLabel('Telefone', { exact: true }).inputValue(), '(77) 99999-1234');
+  assert.equal(await page.getByLabel('E-mail', { exact: true }).inputValue(), 'contato@fazenda.com.br');
+  await page.getByLabel('Telefone', { exact: true }).fill('+55 77 98888-4321');
+  await page.getByLabel('E-mail', { exact: true }).fill('novo@fazenda.com.br');
   await page.getByLabel('Propriedade', { exact: true }).fill('Sítio corrigido QA');
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
@@ -133,7 +139,7 @@ try {
       await page.screenshot({ path: join(process.env.QA_SCREENSHOT_DIR, `qrcode-${width}.png`), fullPage: true });
     }
   }
-  assert.equal(await page.getByText('Os nomes dos responsáveis também ficarão visíveis.', { exact: false }).count(), 1);
+  assert.equal(await page.getByText('Os nomes dos responsáveis, o telefone e o e-mail informados ficarão públicos.', { exact: false }).count(), 1);
 
   await record.getByRole('button', { name: 'Gerar QR Code', exact: true }).click();
   await record.getByRole('img', { name: 'QR Code de origem de Manga QA' }).waitFor();
@@ -188,7 +194,9 @@ try {
   await publicPage.getByText('Manga QA', { exact: true }).waitFor();
   await publicPage.getByText('Sítio corrigido QA', { exact: true }).waitFor();
   await publicPage.getByText('Ana QA e Bruno QA', { exact: true }).waitFor();
-  assert.equal(await publicPage.locator('dd').count(), 4);
+  await publicPage.getByText('+55 77 98888-4321', { exact: true }).waitFor();
+  await publicPage.getByText('novo@fazenda.com.br', { exact: true }).waitFor();
+  assert.equal(await publicPage.locator('dd').count(), 6);
   assert(publicRequestHeaders.every(headers => !headers.authorization && !headers.cookie));
   for (const width of [1440, 390]) {
     await publicPage.setViewportSize({ width, height: 1000 });
@@ -217,7 +225,7 @@ try {
   assert.equal((await db.query('SELECT count(*)::int AS total FROM traceability_labels')).rows[0].total, 0);
   assert.deepEqual(errors, []);
   assert.deepEqual(externalRequests, []);
-  console.log('PASS: formulário → banco isolado → QR Code → consulta pública sem login; download PNG, quatro campos, código inexistente, falha de rede/retentativa, mobile e exclusão com confirmação/revogação do link.');
+  console.log('PASS: formulário → banco isolado → QR Code → consulta pública sem login; edição de contatos, download PNG, impressão, seis campos, código inexistente, falha de rede/retentativa, mobile e exclusão com confirmação/revogação do link.');
 } finally {
   await browser?.close();
   await vite?.close();

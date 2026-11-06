@@ -28,6 +28,8 @@ export default function LabelHistory({ labels, canEdit, onEdit, canDelete, busy,
               <div><dt>Propriedade</dt><dd>{label.property_name}</dd></div>
               <div><dt>Responsáveis pela colheita</dt><dd>{label.producers.map(producer => producer.name).join(', ')}</dd></div>
               <div><dt>Data da colheita</dt><dd>{dateFormatter.format(new Date(`${String(label.harvest_date).slice(0, 10)}T12:00:00`))}</dd></div>
+              {label.phone && <div><dt>Telefone</dt><dd>{label.phone}</dd></div>}
+              {label.email && <div><dt>E-mail</dt><dd>{label.email}</dd></div>}
             </dl>
             <footer>
               <LabelCodeActions label={label} />

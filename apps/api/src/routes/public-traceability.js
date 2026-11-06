@@ -18,7 +18,7 @@ export function createPublicTraceabilityRouter({ pool, requireDatabase }) {
     try {
       const params = [request.params.publicId];
       const label = await pool.query(`
-        SELECT l.product_name,l.property_name,l.producer_names,l.harvest_date::text AS harvest_date
+        SELECT l.product_name,l.property_name,l.producer_names,l.harvest_date::text AS harvest_date,l.phone,l.email
         FROM public.traceability_labels l
         JOIN public.companies c ON c.id=l.company_id AND c.archived_at IS NULL
         WHERE l.public_id=$1 LIMIT 1`, params);
@@ -46,6 +46,8 @@ export function createPublicTraceabilityRouter({ pool, requireDatabase }) {
         property: record.property_name,
         producers: record.producer_names,
         harvestDate: record.harvest_date,
+        phone: record.phone || '',
+        email: record.email || '',
       } });
     } catch (error) {
       console.error('Falha na consulta pública de origem:', error.code || 'UNKNOWN');
